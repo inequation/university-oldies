@@ -1,4 +1,4 @@
-// islip - IneQuation's Scripting Language Interpreter in Pascal
+// islip - IneQuation's Simple LOLCODE Interpreter in Pascal
 // Written by Leszek "IneQuation" Godlewski <leszgod081@student.polsl.pl>
 // Parsing helper unit
 

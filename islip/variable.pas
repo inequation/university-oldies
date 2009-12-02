@@ -1,4 +1,4 @@
-// islip - IneQuation's Scripting Language Interpreter in Pascal
+// islip - IneQuation's Simple LOLCODE Interpreter in Pascal
 // Written by Leszek "IneQuation" Godlewski <leszgod081@student.polsl.pl>
 // Variable class unit
 
@@ -15,6 +15,7 @@ uses typedefs in 'typedefs.pas';
 type
     islip_var_type  = (VT_INVALID, VT_INT, VT_FLOAT, VT_STRING, VT_ARRAY);
 
+    pislip_var      = ^islip_var;
     islip_var       = class
         public
             constructor create(id : string; i : int); overload;
@@ -22,6 +23,9 @@ type
             constructor create(id : string; s : string); overload;
             //constructor create(id : string; arr_type : islip_var_type; s : size_t); overload;
             destructor destroy; override;
+
+            // prints the variable to stdout
+            procedure echo;
         private
             m_id        : string;
             m_type      : islip_var_type;
@@ -121,6 +125,31 @@ begin
             end;}
     end;
     m_valptr := nil;
+end;
+
+procedure islip_var.echo;
+var
+    pi  : ^int;
+    pf  : ^float;
+    ps  : ^string;
+begin
+    case m_type of
+        VT_INT:
+            begin
+                pi := m_valptr;
+                write(pi^);
+            end;
+        VT_FLOAT:
+            begin
+                pf := m_valptr;
+                write(pf^);
+            end;
+        VT_STRING:
+            begin
+                ps := m_valptr;
+                write(ps^);
+            end;
+    end;
 end;
 
 end.

@@ -1,4 +1,4 @@
-// islip - IneQuation's Scripting Language Interpreter in Pascal
+// islip - IneQuation's Simple LOLCODE Interpreter in Pascal
 // Written by Leszek "IneQuation" Godlewski <leszgod081@student.polsl.pl>
 // Bytecode definition
 
@@ -6,15 +6,17 @@ unit bytecode;
 
 interface
 
+uses typedefs, variable;
+
 const
     // ====================================================
     // instructions
     // ====================================================
     
-    // NOP: do nothing
+    // STOP: stop the execution of the program
     // args: n/a
     // result: n/a
-    BI_NOP          =   $00;
+    BI_STOP         =   $00;
 
     // PUSH: push variable onto the stack
     // args: index of the variable to read from and put on the stack
@@ -68,8 +70,26 @@ const
     // PRINT: prints the top of the stack to stdio
     TRAP_PRINT      =   $01;
 
+    // ====================================================
+    // special arguments
+    // ====================================================
+
+    // NULL argument
+    // PUSH behaviour: push a line feed character onto the stack
+    // POP behaviour: just pop the stack without writing the value to a variable
+    ARG_NULL        =   $FFFFFFFF;
+
 type
-    islip_bytecode  = array of byte;
+    // single instruction with the argument
+    islip_inst      = record
+        inst        : byte;
+        arg         : size_t;
+    end;
+    
+    islip_bytecode  = array of islip_inst;
+    pislip_bytecode = ^islip_bytecode;
+    islip_data      = array of islip_var;
+    pislip_data     = ^islip_data;
 
 implementation
 
