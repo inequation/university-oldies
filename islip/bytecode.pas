@@ -74,9 +74,7 @@ const
     // special arguments
     // ====================================================
 
-    // NULL argument
-    // PUSH behaviour: push a line feed character onto the stack
-    // POP behaviour: just pop the stack without writing the value to a variable
+    // NULL argument; with POP just pop the stack without writing the value to a variable
     ARG_NULL        =   $FFFFFFFF;
 
 type

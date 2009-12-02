@@ -20,6 +20,7 @@ type
 
             procedure push(pv : pislip_var);
             procedure pop(pv : pislip_var);
+            function peek : pislip_var;
         private
             m_stack     : array of islip_var;
             m_top       : size_t;
@@ -53,11 +54,30 @@ end;
 procedure islip_interpreter.run;
 var
     i   : int;
+    pv  : pislip_var;
 begin
-    for i := low(m_code^) to high(m_code^) do begin
+    for i := 1 to length(m_code^) do begin
         case m_code^[i].inst of
             BI_STOP:
                 break;
+            BI_PUSH:
+                m_stack.push(@m_data^[m_code^[i].arg + 1]);
+            BI_POP:
+                if m_code^[i].arg = ARG_NULL then
+                    m_stack.pop(nil)
+                else
+                    m_stack.pop(@m_data^[m_code^[i].arg + 1]);
+            BI_TRAP:
+                begin
+                case m_code^[i].arg of
+                    TRAP_PRINT:
+                        begin
+                            pv := m_stack.peek;
+                            pv^.echo;
+                            writeln;
+                        end;
+                end;
+                end;
         end;
     end;
 end;
@@ -80,8 +100,14 @@ end;
 
 procedure islip_stack.pop(pv : pislip_var);
 begin
-    pv^ := m_stack[m_top];
+    if pv <> nil then
+        pv^ := m_stack[m_top];
     dec(m_top);
+end;
+
+function islip_stack.peek : pislip_var;
+begin
+    peek := @m_stack[m_top];
 end;
 
 end.

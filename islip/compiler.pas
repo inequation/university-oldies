@@ -72,7 +72,6 @@ type
             m_vars      : islip_cmp_var_cont;
             m_code      : islip_cmp_code_cont;
             m_done      : boolean;
-            m_lf_index  : size_t;   // index to a line feed character variable
     end;
 
 implementation
@@ -97,7 +96,6 @@ begin
     m_vars := islip_cmp_var_cont.create;
     m_code := islip_cmp_code_cont.create;
     m_done := false;
-    m_lf_index := $FFFFFFFF;
 end;
 
 destructor islip_compiler.destroy;
@@ -231,16 +229,6 @@ begin
                             m_code.append(BI_TRAP, TRAP_PRINT);
                             m_code.append(BI_POP, ARG_NULL);
                         end;
-                        // append a trailing newline
-                        // if we don't have one in the data block yet, create it
-                        if m_lf_index = $FFFFFFFF then begin
-                            new(v);
-                            v^ := islip_var.create('\n', chr(13));
-                            m_lf_index := m_vars.append(v);
-                        end;
-                        m_code.append(BI_PUSH, m_lf_index);
-                        m_code.append(BI_TRAP, TRAP_PRINT);
-                        m_code.append(BI_POP, ARG_NULL);
                     end;
                     continue;
                 // program end
