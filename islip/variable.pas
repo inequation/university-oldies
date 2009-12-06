@@ -13,11 +13,12 @@ interface
 uses typedefs in 'typedefs.pas';
 
 type
-    islip_var_type  = (VT_INVALID, VT_INT, VT_FLOAT, VT_STRING, VT_ARRAY);
+    islip_var_type  = (VT_UNTYPED, VT_INT, VT_FLOAT, VT_STRING, VT_ARRAY);
 
     pislip_var      = ^islip_var;
     islip_var       = class
         public
+            constructor create(id : string); overload;
             constructor create(id : string; i : int); overload;
             constructor create(id : string; f : float); overload;
             constructor create(id : string; s : string); overload;
@@ -33,6 +34,14 @@ type
     end;
 
 implementation
+
+// untyped constructor
+constructor islip_var.create(id : string);
+begin
+    m_id := id;
+    m_valptr := nil;
+    m_type := VT_UNTYPED;
+end;
 
 // integer constructor
 constructor islip_var.create(id : string; i : int);

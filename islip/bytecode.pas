@@ -63,18 +63,28 @@ const
     // result: n/a
     BI_TRAP         =   $09;
 
+    // CALL: call a function (defined in LOLCODE); assumes that parameters are on the stack (stdcall convention)
+    // args: function index
+    // result: function's return value on top of the stack
+    BI_CALL         =   $0A;
+
     // ====================================================
     // interpreter traps
     // ====================================================
 
     // PRINT: prints the top of the stack to stdio
-    TRAP_PRINT      =   $01;
+    TRAP_PRINT      =   $00;
+
+    // LINEFEED: prints a line feed to stdout and flushes the buffer
+    TRAP_LINEFEED   =   $01;
 
     // ====================================================
     // special arguments
     // ====================================================
 
-    // NULL argument; with POP just pop the stack without writing the value to a variable
+    // NULL argument
+    // PUSH behaviour: push an empty variable onto the stack
+    // POP behaviour: just pop the stack without writing the value to a variable
     ARG_NULL        =   $FFFFFFFF;
 
 type

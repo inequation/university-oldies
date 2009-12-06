@@ -61,22 +61,24 @@ begin
             BI_STOP:
                 break;
             BI_PUSH:
-                m_stack.push(@m_data^[m_code^[i].arg + 1]);
+                if m_code^[i].arg = ARG_NULL then
+                    m_stack.push(nil)
+                else
+                    m_stack.push(@m_data^[m_code^[i].arg + 1]);
             BI_POP:
                 if m_code^[i].arg = ARG_NULL then
                     m_stack.pop(nil)
                 else
                     m_stack.pop(@m_data^[m_code^[i].arg + 1]);
             BI_TRAP:
-                begin
                 case m_code^[i].arg of
                     TRAP_PRINT:
                         begin
                             pv := m_stack.peek;
                             pv^.echo;
-                            writeln;
                         end;
-                end;
+                    TRAP_LINEFEED:
+                        writeln;
                 end;
         end;
     end;
@@ -95,7 +97,10 @@ end;
 procedure islip_stack.push(pv : pislip_var);
 begin
     inc(m_top);
-    m_stack[m_top] := pv^;
+    if pv <> nil then
+        m_stack[m_top] := pv^
+    else // FIXME!!!
+        m_stack[m_top] := islip_var.create('');
 end;
 
 procedure islip_stack.pop(pv : pislip_var);
