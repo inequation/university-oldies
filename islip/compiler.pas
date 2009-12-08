@@ -84,7 +84,7 @@ const
 type
     islip_cmp_state = (
         CS_UNDEF,       // undefined state, before reading the first token
-        CS_START,       // we've just had HAI, expecting version number or line break
+        CS_START,       // just had HAI, expecting version number or line break
         CS_STATEMENT    // program body, expecting a statement
     );
 
@@ -109,16 +109,85 @@ end;
 
 function islip_compiler.eval_expr(end_token : string) : boolean;
 var
-    token   : string;
-    toktype : islip_parser_token_type;
+    token       : string;
+    toktype     : islip_parser_token_type;
+    sr, sc, op  : size_t;
 begin
     eval_expr := false;
 
-    while m_parser.get_token(token, toktype) and (length(token) > 0) and (token <> end_token) do begin
+    while m_parser.get_token(token, toktype) and (length(token) > 0)
+        and (token <> end_token) do begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: Token: "', token);
 {$ENDIF}
-    end;    
+        // basic math binary ops: +-*/% min max
+        if (token = 'SUM') or (token = 'DIFF') or (token = 'PRODUKT')
+            or (token = 'QUOSHUNT') or (token = 'MOD') or (token = 'BIGGR')
+            or (token = 'SMALLR') then begin
+            // choose the opcode
+            if token = 'SUM' then
+                op := OP_ADD
+            else if token = 'DIFF' then
+                op := OP_SUB
+            else if token = 'PRODUKT' then
+                op := OP_MUL
+            else if token = 'QUOSHUNT' then
+                op := OP_DIV
+            else if token = 'MOD' then
+                op := OP_MOD
+            else if token = 'BIGGR' then
+                op := OP_MAX
+            else //if token = 'SMALLR' then
+                op := OP_MIN;
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if token <> 'OF' then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "OF" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+            // evaluate everything until an "AN" is found
+            if not eval_expr('AN') then
+                exit;
+            // "AN" has already been read, evaluate the second operand
+            if not eval_expr('') then
+                exit;
+            // add the instruction
+            m_code.append(op, ARG_NULL);
+        // basic boolean binary ops: and or xor
+        end else if (token = 'BOTH') or (token = 'EITHER') or (token = 'WON')
+            then begin
+            // choose the opcode
+            if token = 'BOTH' then
+                op := OP_AND
+            else if token = 'EITHER' then
+                op := OP_OR
+            else //if token = 'WON' then
+                op := OP_XOR;
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if token <> 'OF' then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "OF" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+            // evaluate everything until an "AN" is found
+            if not eval_expr('AN') then
+                exit;
+            // "AN" has already been read, evaluate the second operand
+            if not eval_expr('') then
+                exit;
+            // add the instruction
+            m_code.append(op, ARG_NULL);
+        end;
+    end;
+    eval_expr := true;
 end;
 
 function islip_compiler.compile : boolean;
@@ -143,14 +212,17 @@ begin
             CS_UNDEF:
                 if token <> 'HAI' then begin
                     m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unknown token "', token, '" at line ', sr, ', column ', sc);
+                    writeln('ERROR: Unknown token "', token, '" at line ', sr,
+                        ', column ', sc);
                     exit;
                 end else
                     state := CS_START;
             CS_START:
-                if (token <> LOLCODE_VERSION) and not (token[1] in [chr(10), chr(13)]) then begin
+                if (token <> LOLCODE_VERSION)
+                    and not (token[1] in [chr(10), chr(13)]) then begin
                     m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unsupported language version "', token, '" at line ', sr, ', column ', sc);
+                    writeln('ERROR: Unsupported language version "', token,
+                        '" at line ', sr, ', column ', sc);
                     exit;
                 end else
                     state := CS_STATEMENT;
@@ -164,7 +236,8 @@ begin
                             writeln('ERROR: Unexpected end of file');
                             exit;
                         end;
-                        if (length(token) = 1) and (token[1] in [chr(10), chr(13)]) then
+                        if (length(token) = 1)
+                            and (token[1] in [chr(10), chr(13)]) then
                             break;
                     end;
                     continue;
@@ -177,7 +250,8 @@ begin
                     end;
                     if token <> 'HAS' then begin
                         m_parser.get_pos(sr, sc);
-                        writeln('ERROR: "HAS" expected, but got "', token, '" at line ', sr, ', column ', sc);
+                        writeln('ERROR: "HAS" expected, but got "', token,
+                            '" at line ', sr, ', column ', sc);
                         exit;
                     end else begin
                         // fetch next token
@@ -190,7 +264,8 @@ begin
                             delete(token, length(token), 1);
                             // see if we recognize the library
                             // FIXME: allow inlcusion of third-party files
-                            if (token <> 'STDIO') and (token <> 'MAHZ') then begin
+                            if (token <> 'STDIO') and (token <> 'MAHZ') then
+                                begin
                                 writeln('ERROR: Unknown module "', token, '"');
                                 exit;
                             end else
@@ -216,21 +291,24 @@ begin
                     state := CS_ASSIGN}
                 else if token = 'VISIBLE' then begin
                     // put the value on the stack and print it
-                    if not m_parser.get_token(token, toktype) or ((length(token) = 1) and (token[1] in [chr(10), chr(13)])) then begin
+                    if not m_parser.get_token(token, toktype)
+                        or ((length(token) = 1)
+                        and (token[1] in [chr(10), chr(13)])) then begin
                         writeln('ERROR: Unexpected end of file');
                         exit;
                     end;
 {$IFDEF DEBUG}
-                    writeln('DEBUG: Printing: "', token, '", state: ', integer(state));
+                    writeln('DEBUG: Printing: "', token, '", state: ',
+                        integer(state));
 {$ENDIF}
                     // FIXME: rewrite this to use expression evaluation ONLY
                     if toktype = TT_EXPR then begin
                         // TODO: print variables and evaluate expressions
                         // evaluate everything until a newline
                         if not eval_expr(chr(13)) then
-                            exit;   // rely on eval_expr to print errors and warnings
+                            exit;   // rely on eval_expr to print errors
                     end else begin
-                        // shortcut - create a new variable and get it into the list
+                        // shortcut - create a new var and get it into the list
                         new(v);
                         v^ := islip_var.create(token, token);
                         index := m_vars.append(v);
@@ -249,11 +327,13 @@ begin
                     token := '';
                     break;
                 // skip newlines
-                end else if (length(token) = 1) and (token[1] in [chr(10), chr(13)]) then
+                end else if (length(token) = 1)
+                    and (token[1] in [chr(10), chr(13)]) then
                     continue
                 else begin
                     m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unknown keyword "', token, '" at line ', sr, ', column ', sc);
+                    writeln('ERROR: Unknown keyword "', token, '" at line ', sr,
+                        ', column ', sc);
                     exit;
                 end;
         end;
@@ -267,14 +347,16 @@ begin
     compile := true;
 end;
 
-procedure islip_compiler.get_products(var c : islip_bytecode; var d : islip_data);
+procedure islip_compiler.get_products(var c : islip_bytecode;
+    var d : islip_data);
 var
     pi  : pislip_cmp_inst;
     pv  : pislip_cmp_var;
     i   : int;
 begin
     if not m_done then begin
-        writeln('ERROR: Attempted to retrieve compilation products before compilation');
+        writeln('ERROR: Attempted to retrieve compilation products before ',
+            'compilation');
         exit;
     end;
     

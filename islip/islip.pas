@@ -54,7 +54,8 @@ end;
 procedure islip_print_help;
 begin
     writeln('islip - IneQuation''s Simple LOLCODE Interpreter in Pascal');
-    writeln('Written by Leszek "IneQuation" Godlewski <leszgod081@student.polsl.pl>');
+    writeln('Written by Leszek "IneQuation" Godlewski ',
+        '<leszgod081@student.polsl.pl>');
     writeln('Usage: ', ParamStr(0), ' <SCRIPT FILE>');
 end;
 
@@ -84,7 +85,8 @@ begin
     end;
 
     if not islip_file_open then begin
-        writeln('ERROR: Failed to read script file "', g_options.script_fname, '"');
+        writeln('ERROR: Failed to read script file "', g_options.script_fname,
+            '"');
         exit;
     end;
 
@@ -107,5 +109,4 @@ begin
     g_interpreter.destroy;
 
     // kthxbai!
-    readln;
 end.

@@ -22,7 +22,8 @@ type
             constructor create(id : string; i : int); overload;
             constructor create(id : string; f : float); overload;
             constructor create(id : string; s : string); overload;
-            //constructor create(id : string; arr_type : islip_var_type; s : size_t); overload;
+            {constructor create(id : string; arr_type : islip_var_type;
+                s : size_t); overload;}
             destructor destroy; override;
 
             // prints the variable to stdout
@@ -80,7 +81,8 @@ begin
 end;
 
 // array constructor
-{constructor islip_var.create(id : string; arr_type : islip_var_type; s : size_t);
+{constructor islip_var.create(id : string; arr_type : islip_var_type;
+    s : size_t);
 var
     p   : array of islip_var;
     i   : int;

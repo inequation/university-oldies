@@ -22,7 +22,8 @@ type
             constructor create(var input : cfile);
             //destructor destroy; override;
 
-            // retrieves a single character from input file and advances counters and stuff
+            // retrieves a single character from input file and advances
+            // counters and stuff
             function get_char(var c : char) : boolean;
             // retrieves cursor position in input file (for error reporting)
             procedure get_pos(var row : size_t; var col : size_t);
@@ -48,8 +49,10 @@ type
             // retrieves a single token
             // puts token into s; empty string on eof
             // returns false on parsing errors            
-            function get_token(var s : string; var t : islip_parser_token_type) : boolean;
-            // retrieves current token starting position in input file (for error reporting)
+            function get_token(var s : string; var t : islip_parser_token_type)
+                : boolean;
+            // retrieves current token starting position in input file (for
+            // error reporting)
             procedure get_pos(var row : size_t; var col : size_t);
         private
             m_reader    : islip_reader;
@@ -105,7 +108,8 @@ begin
     m_token := '';
 end;
 
-function islip_parser.get_token(var s : string; var t : islip_parser_token_type) : boolean;
+function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
+    : boolean;
 var
     c       : char;
     state   : islip_parser_token_type;
@@ -116,10 +120,11 @@ begin
     esc := false;
 
     // if we still have a newline left over to throw, do it
-    if (length(m_token) = 1) and (m_token[1] in [chr(10), chr(13), ',']) then begin
+    if (length(m_token) = 1) and (m_token[1] in [chr(10), chr(13), ',']) then
+        begin
         s := m_token;
-        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the string to be zeroed
-        m_token := '';
+        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the
+        m_token := '';           // string to be zeroed in FPC
         exit;
     end;
 
@@ -137,9 +142,9 @@ begin
                     end else if c in [chr(10), chr(13), ',', '.'] then begin
                         m_token := c;
                         s := m_token;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the string to be zeroed
-                        m_token := '';
-                        exit;
+                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
+                        m_token := '';           // necessary for the string to
+                        exit;                    // be zeroed in FPC
                     end else if ord(c) > 32 then begin
                         m_token := m_token + c;
                         state := TT_EXPR;
@@ -150,7 +155,8 @@ begin
             TT_EXPR:
                 begin
                 if c in [chr(10), chr(13), ',', '.'] then begin
-                        // throw what we've got so far and keep that newline in mind
+                        // throw what we've got so far and keep that newline in
+                        // mind
                         s := m_token;
                         m_token := c;
                         exit;
@@ -158,9 +164,9 @@ begin
                         m_token := m_token + c
                     else begin
                         s := m_token;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the string to be zeroed
-                        m_token := '';
-                        exit;
+                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
+                        m_token := '';           // necessary for the string to
+                        exit;                    // be zeroed in FPC
                     end;
                 end;
             TT_STRING:
@@ -187,9 +193,9 @@ begin
                         m_token := m_token + c
                     else begin
                         s := m_token;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the string to be zeroed
-                        m_token := '';
-                        exit;
+                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
+                        m_token := '';           // necessary for the string to
+                        exit;                    // be zeroed in FPC
                     end;
                 end;
         end;
@@ -199,12 +205,14 @@ begin
 
     if esc then begin
         m_reader.get_pos(m_row, m_col);
-        writeln('ERROR: Unknown escape sequence ":', c, '" at line ', m_row, ', column ', m_col);
+        writeln('ERROR: Unknown escape sequence ":', c, '" at line ', m_row,
+            ', column ', m_col);
         get_token := false;
         // make sure token is nonempty
         s := '!';
     end else if (state = TT_STRING) then begin
-        writeln('ERROR: Unterminated string starting at line ', m_row, ', column ', m_col);
+        writeln('ERROR: Unterminated string starting at line ', m_row,
+            ', column ', m_col);
         get_token := false;
         // make sure token is nonempty
         s := '!';

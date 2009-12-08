@@ -28,7 +28,8 @@ type
 
     islip_interpreter   = class
         public
-            constructor create(stack_size : size_t; var c : islip_bytecode; var d : islip_data);
+            constructor create(stack_size : size_t; var c : islip_bytecode;
+                var d : islip_data);
             //destructor destroy; override;
 
             procedure run;
@@ -44,7 +45,8 @@ implementation
 // interpreter implementation
 // ====================================================
 
-constructor islip_interpreter.create(stack_size : size_t; var c : islip_bytecode; var d : islip_data);
+constructor islip_interpreter.create(stack_size : size_t;
+    var c : islip_bytecode; var d : islip_data);
 begin
     m_stack := islip_stack.create(stack_size);
     m_code := @c;

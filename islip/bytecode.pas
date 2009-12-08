@@ -10,7 +10,7 @@ uses typedefs, variable;
 
 const
     // ====================================================
-    // instructions
+    // opcodes
     // ====================================================
     
     // STOP: stop the execution of the program
@@ -48,25 +48,58 @@ const
     // result: pops the two top-most variables and pushes the operation result
     OP_DIV          =   $06;
 
+    // MOD: modulo of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_MOD          =   $07;
+
+    // MIN: minimum of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_MIN          =   $08;
+
+    // MAX: maximum of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_MAX          =   $09;
+
+    // AND: boolean AND of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_AND          =   $0A;
+
+    // OR: boolean OR of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_OR           =   $0B;
+
+    // XOR: boolean XOR of the two top-most variables on the stack
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_XOR          =   $0C;
+
     // JMP: unconditional jump
     // args: instruction offset to apply
-    // result: corresponding pointer arithmetic on the interpreter's instruction pointer
-    OP_JMP          =   $07;
+    // result: corresponding pointer arithmetic on the interpreter's instruction
+    // pointer
+    OP_JMP          =   $0D;
 
     // CNDJMP: conditional jump (if top of the stack < 0)
     // args: instruction offset to apply if condition is true
-    // result: corresponding pointer arithmetic on the interpreter's instruction pointer
-    OP_CNDJMP       =   $08;
+    // result: corresponding pointer arithmetic on the interpreter's instruction
+    // pointer
+    OP_CNDJMP       =   $0E;
 
     // TRAP: call an interpreter trap
     // args: ID of the routine to call
     // result: n/a
-    OP_TRAP         =   $09;
+    OP_TRAP         =   $0F;
 
-    // CALL: call a function (defined in LOLCODE); assumes that parameters are on the stack (stdcall convention)
+    // CALL: call a function (defined in LOLCODE); assumes that parameters are
+    // on the stack (stdcall convention)
     // args: function index
     // result: function's return value on top of the stack
-    OP_CALL         =   $0A;
+    OP_CALL         =   $10;
 
     // ====================================================
     // interpreter traps
