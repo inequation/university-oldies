@@ -26,15 +26,15 @@ type
     // variable container
     islip_cmp_var_cont  = class
         public
+            m_head      : pislip_cmp_var;
+            m_tail      : pislip_cmp_var;
+            m_index     : size_t;
+            
             constructor create;
             destructor destroy; override;
 
             // appends the new variable to the list and returns its index
             function append(v : pislip_var) : size_t;
-
-            m_head      : pislip_cmp_var;
-            m_tail      : pislip_cmp_var;
-            m_index     : size_t;
     end;
 
     // instruction linked list element
@@ -48,32 +48,32 @@ type
     // instruction container
     islip_cmp_code_cont = class
         public
+            m_head      : pislip_cmp_inst;
+            m_tail      : pislip_cmp_inst;
+            m_count     : size_t;
+
             constructor create;
             destructor destroy; override;
 
             // appends the new instruction to the list and returns its index
             procedure append(i : byte; arg : size_t);
-
-            m_head      : pislip_cmp_inst;
-            m_tail      : pislip_cmp_inst;
-            m_count     : size_t;
     end;
 
     islip_compiler          = class
         public
-            constructor create(var input : file);
+            constructor create(var input : cfile);
             destructor destroy; override;
 
             // returns false on compilation failure
             function compile : boolean;
             procedure get_products(var c : islip_bytecode; var d : islip_data);
         private
-            function eval_expr(end_token : string) : boolean;
-
             m_parser    : islip_parser;
             m_vars      : islip_cmp_var_cont;
             m_code      : islip_cmp_code_cont;
             m_done      : boolean;
+
+            function eval_expr(end_token : string) : boolean;
     end;
 
 implementation
@@ -92,7 +92,7 @@ type
 // compiler implementation
 // ====================================================
 
-constructor islip_compiler.create(var input : file);
+constructor islip_compiler.create(var input : cfile);
 begin
     m_parser := islip_parser.create(input);
     m_vars := islip_cmp_var_cont.create;
@@ -235,17 +235,17 @@ begin
                         v^ := islip_var.create(token, token);
                         index := m_vars.append(v);
                         // generate the instructions
-                        m_code.append(BI_PUSH, index);
-                        m_code.append(BI_TRAP, TRAP_PRINT);
-                        m_code.append(BI_POP, ARG_NULL);
+                        m_code.append(OP_PUSH, index);
+                        m_code.append(OP_TRAP, TRAP_PRINT);
+                        m_code.append(OP_POP, ARG_NULL);
                     end;
                     // add a line feed
-                    m_code.append(BI_TRAP, TRAP_LINEFEED);
+                    m_code.append(OP_TRAP, TRAP_LINEFEED);
                     continue;
                 // program end
                 end else if token = 'KTHXBYE' then begin
                     // add a STOP and end parsing
-                    m_code.append(BI_STOP, 0);
+                    m_code.append(OP_STOP, ARG_NULL);
                     token := '';
                     break;
                 // skip newlines
@@ -261,6 +261,7 @@ begin
     if length(token) > 0 then begin
         writeln('ERROR: Unable to parse script');
         compile := false;
+        exit;
     end;
     m_done := true;
     compile := true;
@@ -287,7 +288,7 @@ begin
         d[i] := pv^.v^;
         pv := pv^.next;
 {$IFDEF DEBUG}
-        write('DEBUG: variable #', i - 1, ' = ');
+        write('DEBUG: variable #', i, ' = ');
         d[i].echo;
         writeln;
 {$ENDIF}
@@ -335,8 +336,8 @@ function islip_cmp_var_cont.append(v : pislip_var) : size_t;
 var
     p   : pislip_cmp_var;
 begin
-    append := m_index;
     inc(m_index);
+    append := m_index;
     new(p);
     p^.v := v;
     p^.next := nil;

@@ -13,13 +13,13 @@ interface
 uses typedefs;
 
 type
-    // helper type
+    // helper types
     pstring = ^string;
 
     // retrieves characters from file, keeping track of the cursor position
     islip_reader = class
         public
-            constructor create(var input : file);
+            constructor create(var input : cfile);
             //destructor destroy; override;
 
             // retrieves a single character from input file and advances counters and stuff
@@ -30,7 +30,7 @@ type
             m_row   : size_t;
             m_col   : size_t;
         
-            m_input : file of char;
+            m_input : pcfile;
     end;
 
     islip_parser_token_type  = (
@@ -42,7 +42,7 @@ type
     // assembles read characters into proper tokens
     islip_parser = class
         public
-            constructor create(var input : file);
+            constructor create(var input : cfile);
             //destructor destroy; override;
 
             // retrieves a single token
@@ -65,9 +65,9 @@ implementation
 // islip_reader implementation
 // ========================================================
 
-constructor islip_reader.create(var input : file);
+constructor islip_reader.create(var input : cfile);
 begin
-    m_input := input;
+    m_input := @input;
     m_row := 0;
     m_col := 0;
 end;
@@ -77,11 +77,11 @@ begin
     get_char := true;
 
     // check if there's anything left to read
-    if eof(m_input) then begin
+    if eof(m_input^) then begin
         get_char := false;
         exit;
     end;
-    read(m_input, c);
+    read(m_input^, c);
     if ord(c) = 10 then begin
         inc(m_row);
         m_col := 0;
@@ -99,7 +99,7 @@ end;
 // islip_parser implementation
 // ========================================================
 
-constructor islip_parser.create(var input : file);
+constructor islip_parser.create(var input : cfile);
 begin
     m_reader := islip_reader.create(input);
     m_token := '';
@@ -116,7 +116,7 @@ begin
     esc := false;
 
     // if we still have a newline left over to throw, do it
-    if m_token[1] in [chr(10), chr(13), ',', '.'] then begin
+    if (length(m_token) = 1) and (m_token[1] in [chr(10), chr(13), ',']) then begin
         s := m_token;
         m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the string to be zeroed
         m_token := '';

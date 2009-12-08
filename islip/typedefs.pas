@@ -13,6 +13,10 @@ type
     size_t  = cardinal; // basically an unsigned int
     ushort  = word;     // unsigned short
 
+    // these don't have anything to do with C, but they're here for convenience
+    cfile   = file of char;
+    pcfile  = ^cfile;
+
 implementation
 
 // nothing to see here, move along

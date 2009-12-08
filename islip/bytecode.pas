@@ -16,57 +16,57 @@ const
     // STOP: stop the execution of the program
     // args: n/a
     // result: n/a
-    BI_STOP         =   $00;
+    OP_STOP         =   $00;
 
     // PUSH: push variable onto the stack
     // args: index of the variable to read from and put on the stack
     // result: the variable is on the top of the stack
-    BI_PUSH         =   $01;
+    OP_PUSH         =   $01;
 
     // POP: pop variable off the stack
     // args: index of the variable to write the value off the stack to
     // result: the top-most variable is removed from the stack
-    BI_POP          =   $02;
+    OP_POP          =   $02;
 
     // ADD: addition of the two top-most variables on the stack
     // args: n/a
     // result: pops the two top-most variables and pushes the operation result
-    BI_ADD          =   $03;
+    OP_ADD          =   $03;
 
     // ADD: subtraction of the two top-most variables on the stack
     // args: n/a
     // result: pops the two top-most variables and pushes the operation result
-    BI_SUB          =   $04;
+    OP_SUB          =   $04;
 
     // MUL: multiplication of the two top-most variables on the stack
     // args: n/a
     // result: pops the two top-most variables and pushes the operation result
-    BI_MUL          =   $05;
+    OP_MUL          =   $05;
 
     // DIV: division of the two top-most variables on the stack
     // args: n/a
     // result: pops the two top-most variables and pushes the operation result
-    BI_DIV          =   $06;
+    OP_DIV          =   $06;
 
     // JMP: unconditional jump
     // args: instruction offset to apply
     // result: corresponding pointer arithmetic on the interpreter's instruction pointer
-    BI_JMP          =   $07;
+    OP_JMP          =   $07;
 
     // CNDJMP: conditional jump (if top of the stack < 0)
     // args: instruction offset to apply if condition is true
     // result: corresponding pointer arithmetic on the interpreter's instruction pointer
-    BI_CNDJMP       =   $08;
+    OP_CNDJMP       =   $08;
 
     // TRAP: call an interpreter trap
     // args: ID of the routine to call
     // result: n/a
-    BI_TRAP         =   $09;
+    OP_TRAP         =   $09;
 
     // CALL: call a function (defined in LOLCODE); assumes that parameters are on the stack (stdcall convention)
     // args: function index
     // result: function's return value on top of the stack
-    BI_CALL         =   $0A;
+    OP_CALL         =   $0A;
 
     // ====================================================
     // interpreter traps
@@ -85,7 +85,7 @@ const
     // NULL argument
     // PUSH behaviour: push an empty variable onto the stack
     // POP behaviour: just pop the stack without writing the value to a variable
-    ARG_NULL        =   $FFFFFFFF;
+    ARG_NULL        =   $00000000;
 
 type
     // single instruction with the argument

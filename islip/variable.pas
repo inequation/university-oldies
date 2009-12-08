@@ -10,7 +10,7 @@ unit variable;
 
 interface
 
-uses typedefs in 'typedefs.pas';
+uses typedefs;
 
 type
     islip_var_type  = (VT_UNTYPED, VT_INT, VT_FLOAT, VT_STRING, VT_ARRAY);

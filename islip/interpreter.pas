@@ -58,19 +58,19 @@ var
 begin
     for i := 1 to length(m_code^) do begin
         case m_code^[i].inst of
-            BI_STOP:
+            OP_STOP:
                 break;
-            BI_PUSH:
+            OP_PUSH:
                 if m_code^[i].arg = ARG_NULL then
                     m_stack.push(nil)
                 else
-                    m_stack.push(@m_data^[m_code^[i].arg + 1]);
-            BI_POP:
+                    m_stack.push(@m_data^[m_code^[i].arg]);
+            OP_POP:
                 if m_code^[i].arg = ARG_NULL then
                     m_stack.pop(nil)
                 else
-                    m_stack.pop(@m_data^[m_code^[i].arg + 1]);
-            BI_TRAP:
+                    m_stack.pop(@m_data^[m_code^[i].arg]);
+            OP_TRAP:
                 case m_code^[i].arg of
                     TRAP_PRINT:
                         begin

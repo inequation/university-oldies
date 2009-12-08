@@ -29,7 +29,7 @@ type
 var
     g_options       : islip_options;
     
-    g_script        : file of byte;
+    g_script        : cfile;
 
     g_compiler      : islip_compiler;
     g_interpreter   : islip_interpreter;
@@ -107,4 +107,5 @@ begin
     g_interpreter.destroy;
 
     // kthxbai!
+    readln;
 end.
