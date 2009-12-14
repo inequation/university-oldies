@@ -20,6 +20,7 @@ type
     pislip_cmp_var      = ^islip_cmp_var;
     islip_cmp_var       = record
         next            : pislip_cmp_var;
+        id              : string;
         v               : pislip_var;
     end;
 
@@ -34,7 +35,9 @@ type
             destructor destroy; override;
 
             // appends the new variable to the list and returns its index
-            function append(v : pislip_var) : size_t;
+            function append(v : pislip_var; id : string) : size_t;
+            // finds the given variable by its ID; returns ARG_NULL if not found
+            function get_var(id : string) : size_t;
     end;
 
     // instruction linked list element
@@ -112,11 +115,14 @@ var
     token       : string;
     toktype     : islip_parser_token_type;
     sr, sc, op  : size_t;
+label
+    restart;    // for reinterpreting the same token
 begin
     eval_expr := false;
 
     while m_parser.get_token(token, toktype) and (length(token) > 0)
         and (token <> end_token) do begin
+restart:
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: Token: "', token);
 {$ENDIF}
@@ -157,13 +163,44 @@ begin
                 exit;
             // add the instruction
             m_code.append(op, ARG_NULL);
-        // basic boolean binary ops: and or xor
-        end else if (token = 'BOTH') or (token = 'EITHER') or (token = 'WON')
-            then begin
+        // basic boolean ops: && ==
+        // oops! the BOTH keyword can start both an AND and an equality check,
+        // thus the separate code block
+        end else if token = 'BOTH' then begin
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            // boolean AND
+            if token = 'OF' then begin
+                // evaluate everything until an "AN" is found
+                if not eval_expr('AN') then
+                    exit;
+                // "AN" has already been read, evaluate the second operand
+                if not eval_expr('') then
+                    exit;
+                // add the instruction
+                m_code.append(OP_ADD, ARG_NULL);
+            // equality check
+            end else if token = 'SAEM' then begin
+                // evaluate everything until an "AN" is found
+                if not eval_expr('AN') then
+                    exit;
+                // "AN" has already been read, evaluate the second operand
+                if not eval_expr('') then
+                    exit;
+                // add the instruction
+                m_code.append(OP_EQ, ARG_NULL);
+            end else begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "OF" or "SAEM" expected, but got "', token,
+                '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+        // basic boolean binary ops: || ^
+        end else if (token = 'EITHER') or (token = 'WON') then begin
             // choose the opcode
-            if token = 'BOTH' then
-                op := OP_AND
-            else if token = 'EITHER' then
+            if token = 'EITHER' then
                 op := OP_OR
             else //if token = 'WON' then
                 op := OP_XOR;
@@ -185,6 +222,16 @@ begin
                 exit;
             // add the instruction
             m_code.append(op, ARG_NULL);
+        // inequality
+        end else if (token = 'DIFFRINT') then begin
+            // evaluate everything until an "AN" is found
+            if not eval_expr('AN') then
+                exit;
+            // "AN" has already been read, evaluate the second operand
+            if not eval_expr('') then
+                exit;
+            // add the instruction
+            m_code.append(OP_NEQ, ARG_NULL);
         end;
     end;
     eval_expr := true;
@@ -310,8 +357,8 @@ begin
                     end else begin
                         // shortcut - create a new var and get it into the list
                         new(v);
-                        v^ := islip_var.create(token, token);
-                        index := m_vars.append(v);
+                        v^ := islip_var.create(token);
+                        index := m_vars.append(v, token);
                         // generate the instructions
                         m_code.append(OP_PUSH, index);
                         m_code.append(OP_TRAP, TRAP_PRINT);
@@ -414,7 +461,7 @@ begin
     end;
 end;
 
-function islip_cmp_var_cont.append(v : pislip_var) : size_t;
+function islip_cmp_var_cont.append(v : pislip_var; id : string) : size_t;
 var
     p   : pislip_cmp_var;
 begin
@@ -422,6 +469,7 @@ begin
     append := m_index;
     new(p);
     p^.v := v;
+    p^.id := id;
     p^.next := nil;
     if m_head = nil then begin
         m_head := p;
@@ -429,6 +477,24 @@ begin
     end else begin
         m_tail^.next := p;
         m_tail := p;
+    end;
+end;
+
+function islip_cmp_var_cont.get_var(id : string) : size_t;
+var
+    p   : pislip_cmp_var;
+    i   : size_t;
+begin
+    get_var := ARG_NULL;
+    i := 0;
+    p := m_head;
+    while p <> nil do begin
+        if p^.id = id then begin
+            get_var := i;
+            exit;
+        end;
+        p := p^.next;
+        inc(i);
     end;
 end;
 
