@@ -13,10 +13,10 @@ interface
 uses typedefs;
 
 type
-    islip_var_type  = (VT_UNTYPED, VT_INT, VT_FLOAT, VT_STRING, VT_BOOL, VT_ARRAY);
+    islip_type  = (VT_UNTYPED, VT_INT, VT_FLOAT, VT_STRING, VT_BOOL, VT_ARRAY);
 
-    pislip_var      = ^islip_var;
-    islip_var       = class
+    pislip_var  = ^islip_var;
+    islip_var   = class
         public
             constructor create; overload;
             constructor create(var v : islip_var); overload;
@@ -31,7 +31,7 @@ type
             // prints the variable to stdout
             procedure echo;
         private
-            m_type      : islip_var_type;
+            m_type      : islip_type;
             m_valptr    : pointer;
     end;
 

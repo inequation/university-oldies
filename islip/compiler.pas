@@ -76,7 +76,7 @@ type
             m_code      : islip_cmp_code_cont;
             m_done      : boolean;
 
-            function eval_expr(end_token : string) : boolean;
+            function eval_expr : islip_type;
     end;
 
 implementation
@@ -110,22 +110,22 @@ begin
     m_code.destroy;
 end;
 
-function islip_compiler.eval_expr(end_token : string) : boolean;
+function islip_compiler.eval_expr : islip_type;
 var
     token       : string;
     toktype     : islip_parser_token_type;
     sr, sc, op  : size_t;
-label
-    restart;    // for reinterpreting the same token
+    temp        : islip_type;
+    floatmath   : boolean;
+    v           : pislip_var;
 begin
-    eval_expr := false;
+    eval_expr := VT_UNTYPED;  // i.e. expression is invalid
 
-    while m_parser.get_token(token, toktype) and (length(token) > 0)
-        and (token <> end_token) do begin
-restart:
+    if m_parser.get_token(token, toktype) and (length(token) > 0) then begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: Token: "', token);
 {$ENDIF}
+        floatmath := false;
         // basic math binary ops: +-*/% min max
         if (token = 'SUM') or (token = 'DIFF') or (token = 'PRODUKT')
             or (token = 'QUOSHUNT') or (token = 'MOD') or (token = 'BIGGR')
@@ -155,14 +155,41 @@ restart:
                     '" at line ', sr, ', column ', sc);
                 exit;
             end;
-            // evaluate everything until an "AN" is found
-            if not eval_expr('AN') then
+            // evaluate the first operand
+            temp := eval_expr;
+            if not ((temp = VT_INT) or (temp = VT_FLOAT)) then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
                 exit;
-            // "AN" has already been read, evaluate the second operand
-            if not eval_expr('') then
+            end;
+            floatmath := temp = VT_FLOAT;
+            // read the "AN" keyword
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
                 exit;
+            end;
+            if token <> 'AN' then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "AN" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+            // evaluate the second operand
+            temp := eval_expr;
+            if not ((temp = VT_INT) or (temp = VT_FLOAT)) then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
+                exit;
+            end;
+            floatmath := floatmath or (temp = VT_FLOAT);
             // add the instruction
             m_code.append(op, ARG_NULL);
+            if floatmath then
+                eval_expr := VT_FLOAT
+            else
+                eval_expr := VT_INT;
         // basic boolean ops: && ==
         // oops! the BOTH keyword can start both an AND and an equality check,
         // thus the separate code block
@@ -173,24 +200,64 @@ restart:
             end;
             // boolean AND
             if token = 'OF' then begin
-                // evaluate everything until an "AN" is found
-                if not eval_expr('AN') then
+                // evaluate first operand
+                if eval_expr <> VT_BOOL then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Invalid operand type to binary math ',
+                        'operator at line', sr, ', column ', sc);
                     exit;
-                // "AN" has already been read, evaluate the second operand
-                if not eval_expr('') then
+                end;
+                // read the "AN" keyword
+                if not m_parser.get_token(token, toktype) then begin
+                    writeln('ERROR: Unexpected end of file');
                     exit;
+                end;
+                if token <> 'AN' then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: "AN" expected, but got "', token,
+                        '" at line ', sr, ', column ', sc);
+                    exit;
+                end;
+                // evaluate second operand
+                if eval_expr <> VT_BOOL then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Invalid operand type to binary math ',
+                        'operator at line', sr, ', column ', sc);
+                    exit;
+                end;
                 // add the instruction
-                m_code.append(OP_ADD, ARG_NULL);
+                m_code.append(OP_AND, ARG_NULL);
+                eval_expr := VT_BOOL;
             // equality check
             end else if token = 'SAEM' then begin
-                // evaluate everything until an "AN" is found
-                if not eval_expr('AN') then
+                // evaluate first operand
+                if eval_expr <> VT_BOOL then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Invalid operand type to binary math ',
+                        'operator at line', sr, ', column ', sc);
                     exit;
-                // "AN" has already been read, evaluate the second operand
-                if not eval_expr('') then
+                end;
+                // read the "AN" keyword
+                if not m_parser.get_token(token, toktype) then begin
+                    writeln('ERROR: Unexpected end of file');
                     exit;
+                end;
+                if token <> 'AN' then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: "AN" expected, but got "', token,
+                        '" at line ', sr, ', column ', sc);
+                    exit;
+                end;
+                // evaluate second operand
+                if eval_expr <> VT_BOOL then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Invalid operand type to binary math ',
+                        'operator at line', sr, ', column ', sc);
+                    exit;
+                end;
                 // add the instruction
                 m_code.append(OP_EQ, ARG_NULL);
+                eval_expr := VT_BOOL;
             end else begin
                 m_parser.get_pos(sr, sc);
                 writeln('ERROR: "OF" or "SAEM" expected, but got "', token,
@@ -214,27 +281,74 @@ restart:
                     '" at line ', sr, ', column ', sc);
                 exit;
             end;
-            // evaluate everything until an "AN" is found
-            if not eval_expr('AN') then
+            // evaluate the first operand
+            if eval_expr <> VT_BOOL then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
                 exit;
-            // "AN" has already been read, evaluate the second operand
-            if not eval_expr('') then
+            end;
+            // read the "AN" keyword
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
                 exit;
+            end;
+            if token <> 'AN' then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "AN" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+            // evaluate the second operand
+            if eval_expr <> VT_BOOL then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
+                exit;
+            end;
             // add the instruction
             m_code.append(op, ARG_NULL);
+            eval_expr := VT_BOOL;
         // inequality
         end else if (token = 'DIFFRINT') then begin
-            // evaluate everything until an "AN" is found
-            if not eval_expr('AN') then
+            // evaluate the first operand
+            if eval_expr <> VT_BOOL then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
                 exit;
-            // "AN" has already been read, evaluate the second operand
-            if not eval_expr('') then
+            end;
+            // read the "AN" keyword
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
                 exit;
+            end;
+            if token <> 'AN' then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: "AN" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+            // evaluate the second operand
+            if eval_expr <> VT_BOOL then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid operand type to binary math operator ',
+                    'at line', sr, ', column ', sc);
+                exit;
+            end;
             // add the instruction
             m_code.append(OP_NEQ, ARG_NULL);
+            eval_expr := VT_BOOL;
+        // string constant
+        end else if toktype = TT_STRING then begin
+            // create a new var and get it into the list
+            new(v);
+            v^ := islip_var.create(token);
+            // generate the instructions
+            m_code.append(OP_PUSH, m_vars.append(v, token));
+            eval_expr := VT_STRING;
         end;
     end;
-    eval_expr := true;
 end;
 
 function islip_compiler.compile : boolean;
@@ -349,12 +463,19 @@ begin
                         integer(state));
 {$ENDIF}
                     // FIXME: rewrite this to use expression evaluation ONLY
-                    if toktype = TT_EXPR then begin
+                    //if toktype = TT_EXPR then begin
                         // TODO: print variables and evaluate expressions
                         // evaluate everything until a newline
-                        if not eval_expr(chr(13)) then
-                            exit;   // rely on eval_expr to print errors
-                    end else begin
+                        // get the cursor position in case an error appears
+                        m_parser.get_pos(sr, sc);
+                        if eval_expr = VT_UNTYPED then begin
+                            writeln('ERROR: Unable to evaluate expression at ',
+                                'line ', sr, ', column ', sc);
+                            exit;
+                        end;
+                        m_code.append(OP_TRAP, TRAP_PRINT);
+                        m_code.append(OP_POP, ARG_NULL);
+                    {end else begin
                         // shortcut - create a new var and get it into the list
                         new(v);
                         v^ := islip_var.create(token);
@@ -363,7 +484,7 @@ begin
                         m_code.append(OP_PUSH, index);
                         m_code.append(OP_TRAP, TRAP_PRINT);
                         m_code.append(OP_POP, ARG_NULL);
-                    end;
+                    end;}
                     // add a line feed
                     m_code.append(OP_TRAP, TRAP_LINEFEED);
                     continue;
