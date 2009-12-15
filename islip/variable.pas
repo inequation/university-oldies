@@ -30,6 +30,8 @@ type
 
             // prints the variable to stdout
             procedure echo;
+            // returns variable type
+            function get_type : islip_type;
         private
             m_type      : islip_type;
             m_valptr    : pointer;
@@ -210,7 +212,7 @@ begin
         VT_FLOAT:
             begin
                 pf := m_valptr;
-                write(pf^);
+                write(pf^:0:2);
             end;
         VT_STRING:
             begin
@@ -226,6 +228,11 @@ begin
                     write('FAIL');
             end;
     end;
+end;
+
+function islip_var.get_type : islip_type;
+begin
+    get_type := m_type;
 end;
 
 end.

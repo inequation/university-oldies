@@ -10,7 +10,7 @@ unit interpreter;
 
 interface
 
-uses typedefs, variable, bytecode;
+uses typedefs, variable, bytecode, SysUtils;
 
 type
     islip_stack         = class
@@ -82,6 +82,12 @@ begin
                     TRAP_LINEFEED:
                         writeln;
                 end;
+            else begin
+                writeln('ERROR: Invalid instruction 0x',
+                    IntToHex(m_code^[i].inst, 2), ', possibly corrupt bytecode ',
+                    'or unimplemented instruction');
+                exit;
+            end;
         end;
     end;
 end;
@@ -98,6 +104,10 @@ end;
 
 procedure islip_stack.push(pv : pislip_var);
 begin
+    if m_top = length(m_stack) then begin
+        writeln('ERROR: Stack overflow');
+        exit;
+    end;
     inc(m_top);
     if pv <> nil then
         m_stack[m_top] := pv^
@@ -107,6 +117,10 @@ end;
 
 procedure islip_stack.pop(pv : pislip_var);
 begin
+    if m_top <= 0 then begin
+        writeln('ERROR: Stack underflow');
+        exit;
+    end;
     if pv <> nil then
         pv^ := m_stack[m_top];
     dec(m_top);

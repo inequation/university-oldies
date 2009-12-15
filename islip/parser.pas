@@ -112,7 +112,6 @@ function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
     : boolean;
 var
     c       : char;
-    state   : islip_parser_token_type;
     esc     : boolean;
 begin
     get_token := true;
@@ -129,17 +128,17 @@ begin
     end;
 
     // initial state
-    state := TT_WS;
+    t := TT_WS;
 
     while m_reader.get_char(c) do begin
-        case state of
+        case t of
             TT_WS:
                 begin
                     if c = '"' then begin
-                        state := TT_STRING;
+                        t := TT_STRING;
                         // keep track of where we started the token
                         m_reader.get_pos(m_row, m_col);
-                    end else if c in [chr(10), chr(13), ',', '.'] then begin
+                    end else if c in [chr(10), chr(13), ','] then begin
                         m_token := c;
                         s := m_token;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
@@ -147,14 +146,14 @@ begin
                         exit;                    // be zeroed in FPC
                     end else if ord(c) > 32 then begin
                         m_token := m_token + c;
-                        state := TT_EXPR;
+                        t := TT_EXPR;
                         // keep track of where we started the token
                         m_reader.get_pos(m_row, m_col);
                     end;
                 end;
             TT_EXPR:
                 begin
-                if c in [chr(10), chr(13), ',', '.'] then begin
+                if c in [chr(10), chr(13), ','] then begin
                         // throw what we've got so far and keep that newline in
                         // mind
                         s := m_token;
@@ -210,7 +209,7 @@ begin
         get_token := false;
         // make sure token is nonempty
         s := '!';
-    end else if (state = TT_STRING) then begin
+    end else if (t = TT_STRING) then begin
         writeln('ERROR: Unterminated string starting at line ', m_row,
             ', column ', m_col);
         get_token := false;

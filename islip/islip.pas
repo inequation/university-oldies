@@ -18,7 +18,8 @@ uses
     typedefs,       // C-like types
     compiler,       // language parser and bytecode compiler
     bytecode,       // bytecode definitions
-    interpreter;    // bytecode interpreter
+    interpreter,    // bytecode interpreter
+    variable;
 
 type
     // container for command line options
@@ -77,6 +78,87 @@ begin
     close(g_script);
 end;
 
+// output pseudo-assembly code
+procedure islip_asm_print;
+var
+    i   : integer;
+begin
+    writeln('------ BEGIN PSEUDO-ASM BLOCK -------');
+    writeln('.data:');
+    for i := 1 to length(g_data) do begin
+        write('  0x', IntToHex(i, 8), ' = ');
+        if g_data[i].get_type = VT_STRING then
+            write('"');
+        g_data[i].echo;
+        if g_data[i].get_type = VT_STRING then
+            write('"');
+        writeln;
+    end;
+    writeln;
+    writeln('.text:');
+    for i := 1 to length(g_bytecode) do begin
+        case g_bytecode[i].inst of
+            OP_STOP:
+                writeln('  stop');
+            OP_PUSH:
+                begin
+                    if g_bytecode[i].arg = ARG_NULL then
+                        writeln('  push   NULL')
+                    else
+                        writeln('  push   0x', IntToHex(g_bytecode[i].arg, 8));
+                end;
+            OP_POP:
+                begin
+                    if g_bytecode[i].arg = ARG_NULL then
+                        writeln('  pop    NULL')
+                    else
+                        writeln('  pop    0x', IntToHex(g_bytecode[i].arg, 8));
+                end;
+            OP_ADD:
+                writeln('  add   ');
+            OP_SUB:
+                writeln('  sub   ');
+            OP_MUL:
+                writeln('  mul   ');
+            OP_DIV:
+                writeln('  div   ');
+            OP_MOD:
+                writeln('  mod   ');
+            OP_MIN:
+                writeln('  min   ');
+            OP_MAX:
+                writeln('  max   ');
+            OP_AND:
+                writeln('  and   ');
+            OP_OR:
+                writeln('  or    ');
+            OP_XOR:
+                writeln('  xor   ');
+            OP_EQ:
+                writeln('  eq    ');
+            OP_NEQ:
+                writeln('  neq   ');
+            OP_JMP:
+                writeln('  jmp    ', g_bytecode[i].arg);
+            OP_CNDJMP:
+                writeln('  cndjmp ', g_bytecode[i].arg);
+            OP_TRAP:
+                begin
+                    write('  trap   ');
+                    case g_bytecode[i].arg of
+                        TRAP_PRINT:
+                            writeln('PRINT');
+                        TRAP_LINEFEED:
+                            writeln('LINEFEED');
+                    end;
+                end;
+            OP_CALL:
+                writeln(' call   0x', IntToHex(g_bytecode[i].arg, 8));
+        end;
+    end;
+    writeln('------- END PSEUDO-ASM BLOCK --------');
+end;
+
 // main routine
 begin
     if not islip_parse_args then begin
@@ -102,6 +184,10 @@ begin
     // retrieve compilation products
     g_compiler.get_products(g_bytecode, g_data);
     g_compiler.destroy;
+
+    // output pseudo-asm, if requested
+    // FIXME
+    islip_asm_print;
 
     // run the bytecode
     g_interpreter := islip_interpreter.create(32, g_bytecode, g_data);
