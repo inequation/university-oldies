@@ -13,7 +13,16 @@ unit compiler;
 
 interface
 
-uses typedefs, parser, bytecode, variable, SysUtils;
+uses
+  typedefs,
+  parser,
+  bytecode,
+  variable,
+{$IFNDEF fpc}
+  atof,
+{$ENDIF}
+  SysUtils,
+  ;
 
 type
     // variable linked list element
@@ -171,7 +180,6 @@ begin
         end;
         // evaluate the first operand
         temp := eval_expr();
-        writeln('temp = ', integer(temp));
         if not ((temp = VT_INT) or (temp = VT_FLOAT)) then begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: Invalid operand type to binary math operator ',
@@ -380,7 +388,6 @@ begin
         // we can detect number literals by the first character
         if (token[1] in ['0'..'9']) or (token[1] = '-') then begin
             floatmath := false;
-            // check if this is a 
             // don't switch to floating point math unless we find a radix
             for i := 2 to length(token) do begin
                 if token[i] = '.' then begin
@@ -402,6 +409,7 @@ begin
             end;
             new(v);
             if floatmath then begin
+{$IFDEF fpc}
                 try
                     f := StrToFloat(token);
                 except
@@ -412,6 +420,9 @@ begin
                         exit;
                     end;
                 end;
+{$ELSE}
+                f := atof(token);
+{$ENDIF}
                 v^ := islip_var.create(f);
                 eval_expr := VT_FLOAT;
             end else begin
