@@ -23,7 +23,7 @@ type
             function peek : pislip_var;
         private
             m_stack     : array of islip_var;
-            m_top       : size_t;
+            m_top       : integer;
     end;
 
     islip_interpreter   = class
@@ -57,6 +57,7 @@ procedure islip_interpreter.run;
 var
     i   : int;
     pv  : pislip_var;
+    v   : islip_var;
 begin
     for i := 1 to length(m_code^) do begin
         case m_code^[i].inst of
@@ -72,12 +73,55 @@ begin
                     m_stack.pop(nil)
                 else
                     m_stack.pop(@m_data^[m_code^[i].arg]);
+            OP_ADD,
+            OP_SUB,
+            OP_MUL,
+            OP_DIV,
+            OP_MOD,
+            OP_MIN,
+            OP_MAX:
+                // pop the top-most value off the stack, write the result
+                // into the second one
+                begin
+                    m_stack.pop(@v);
+                    pv := m_stack.peek;
+                    if not pv^.math(@v, m_code^[i].inst) then begin
+                        writeln('RUNTIME ERROR: Invalid operands to ',
+                            'arithmetic operator at 0x', IntToHex(i, 8));
+                    end;
+                end;
+            OP_NEG:
+                begin
+                    pv := m_stack.peek;
+                    pv^.logic(nil, OP_NEG);
+                end;
+            OP_AND,
+            OP_OR,
+            OP_XOR,
+            OP_EQ,
+            OP_NEQ:
+                // pop the top-most value off the stack, write the result
+                // into the second one
+                begin
+                    m_stack.pop(@v);
+                    pv := m_stack.peek;
+                    if not pv^.logic(@v, m_code^[i].inst) then begin
+                        writeln('RUNTIME ERROR: Invalid operands to ',
+                            'logical operator at 0x', IntToHex(i, 8));
+                    end;
+                end;
+            OP_CONCAT:
+                begin
+                    m_stack.pop(@v);
+                    pv := m_stack.peek;
+                    pv^.concat(@v);
+                end;
             OP_TRAP:
                 case m_code^[i].arg of
                     TRAP_PRINT:
                         begin
-                            pv := m_stack.peek;
-                            pv^.echo;
+                            m_stack.pop(@v);
+                            v.echo;
                         end;
                     TRAP_LINEFEED:
                         writeln;
@@ -111,8 +155,8 @@ begin
     inc(m_top);
     if pv <> nil then
         m_stack[m_top] := pv^
-    else // FIXME!!!
-        m_stack[m_top] := islip_var.create('');
+    else
+        m_stack[m_top] := islip_var.create;
 end;
 
 procedure islip_stack.pop(pv : pislip_var);
@@ -128,6 +172,10 @@ end;
 
 function islip_stack.peek : pislip_var;
 begin
+    if m_top < 1 then begin
+        writeln('ERROR: Peeking into an empty stack');
+        exit;
+    end;
     peek := @m_stack[m_top];
 end;
 

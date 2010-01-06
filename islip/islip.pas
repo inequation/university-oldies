@@ -138,6 +138,10 @@ begin
                 writeln('  eq    ');
             OP_NEQ:
                 writeln('  neq   ');
+            OP_NEG:
+                writeln('  neg   ');
+            OP_CONCAT:
+                writeln('  cncat ');
             OP_JMP:
                 writeln('  jmp    ', g_bytecode[i].arg);
             OP_CNDJMP:
@@ -183,11 +187,12 @@ begin
     islip_file_close;
     // retrieve compilation products
     g_compiler.get_products(g_bytecode, g_data);
-    g_compiler.destroy;
 
     // output pseudo-asm, if requested
     // FIXME
     islip_asm_print;
+
+    g_compiler.destroy;
 
     // run the bytecode
     g_interpreter := islip_interpreter.create(32, g_bytecode, g_data);

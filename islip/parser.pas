@@ -51,6 +51,9 @@ type
             // returns false on parsing errors            
             function get_token(var s : string; var t : islip_parser_token_type)
                 : boolean;
+            // returns to previous token for reinterpretation
+            // NOTE: can only roll 1 token back
+            procedure unget_token;
             // retrieves current token starting position in input file (for
             // error reporting)
             procedure get_pos(var row : size_t; var col : size_t);
@@ -60,6 +63,7 @@ type
             m_row       : size_t;
             m_col       : size_t;
             m_token     : string;
+            m_prevtoken : string;
     end;
 
 implementation
@@ -106,6 +110,7 @@ constructor islip_parser.create(var input : cfile);
 begin
     m_reader := islip_reader.create(input);
     m_token := '';
+    m_prevtoken := '';
 end;
 
 function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
@@ -118,10 +123,10 @@ begin
 
     esc := false;
 
-    // if we still have a newline left over to throw, do it
-    if (length(m_token) = 1) and (m_token[1] in [chr(10), chr(13), ',']) then
-        begin
+    // if we still have something to throw, do it
+    if length(m_token) > 0 then begin
         s := m_token;
+        m_prevtoken := m_token;
         m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the
         m_token := '';           // string to be zeroed in FPC
         exit;
@@ -141,6 +146,7 @@ begin
                     end else if c in [chr(10), chr(13), ','] then begin
                         m_token := c;
                         s := m_token;
+                        m_prevtoken := m_token;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -157,12 +163,14 @@ begin
                         // throw what we've got so far and keep that newline in
                         // mind
                         s := m_token;
+                        m_prevtoken := m_token;
                         m_token := c;
                         exit;
                     end else if ord(c) > 32 then
                         m_token := m_token + c
                     else begin
                         s := m_token;
+                        m_prevtoken := m_token;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -192,6 +200,7 @@ begin
                         m_token := m_token + c
                     else begin
                         s := m_token;
+                        m_prevtoken := m_token;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -218,6 +227,12 @@ begin
     end else
         // return an empty token on eof
         s := '';
+end;
+
+procedure islip_parser.unget_token;
+begin
+    if length(m_prevtoken) > 0 then
+        m_token := m_prevtoken;
 end;
 
 procedure islip_parser.get_pos(var row : size_t; var col : size_t);

@@ -18,11 +18,8 @@ uses
   parser,
   bytecode,
   variable,
-{$IFNDEF fpc}
-  atof,
-{$ENDIF}
-  SysUtils,
-  ;
+  convert,
+  SysUtils;
 
 type
     // variable linked list element
@@ -90,7 +87,7 @@ type
             m_code      : islip_cmp_code_cont;
             m_done      : boolean;
 
-            function eval_expr : islip_type;
+            function eval_expr : boolean;
     end;
 
 implementation
@@ -124,18 +121,17 @@ begin
     m_code.destroy;
 end;
 
-function islip_compiler.eval_expr : islip_type;
+function islip_compiler.eval_expr : boolean;
 var
     token       : string;
     toktype     : islip_parser_token_type;
     sr, sc, op  : size_t;
-    temp        : islip_type;
-    floatmath   : boolean;
     v           : pislip_var;
     f           : float;
     i           : int;
+    floatmath   : boolean;
 begin
-    eval_expr := VT_UNTYPED;  // i.e. expression is invalid
+    eval_expr := false;  // i.e. expression is invalid
 
     if not (m_parser.get_token(token, toktype) and (length(token) > 0)) then begin
         writeln('ERROR: Unexpected end of file');
@@ -145,7 +141,6 @@ begin
 {$IFDEF DEBUG}
     writeln('DEBUG: eval_expr: Token: "', token, '", token type: ', integer(toktype));
 {$ENDIF}
-    floatmath := false;
     // basic math binary ops: +-*/% min max
     if (token = 'SUM') or (token = 'DIFF') or (token = 'PRODUKT')
         or (token = 'QUOSHUNT') or (token = 'MOD') or (token = 'BIGGR')
@@ -179,14 +174,8 @@ begin
             exit;
         end;
         // evaluate the first operand
-        temp := eval_expr();
-        if not ((temp = VT_INT) or (temp = VT_FLOAT)) then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
-        floatmath := temp = VT_FLOAT;
         // read the "AN" keyword
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
@@ -199,23 +188,13 @@ begin
             exit;
         end;
         // evaluate the second operand
-        temp := eval_expr();
-        if not ((temp = VT_INT) or (temp = VT_FLOAT)) then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
-        floatmath := floatmath or (temp = VT_FLOAT);
         // add the instruction
         m_code.append(op, ARG_NULL);
-        if floatmath then
-            eval_expr := VT_FLOAT
-        else
-            eval_expr := VT_INT;
-        // basic boolean ops: && ==
-        // oops! the BOTH keyword can start both an AND and an equality check,
-        // thus the separate code block
+    // basic boolean ops: && ==
+    // oops! the BOTH keyword can start both an AND and an equality check,
+    // thus the separate code block
     end else if token = 'BOTH' then begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: BOTH');
@@ -228,12 +207,8 @@ begin
         // boolean AND
         if token = 'OF' then begin
             // evaluate first operand
-            if eval_expr() <> VT_BOOL then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Invalid operand type to binary math ',
-                    'operator at line ', sr, ', column ', sc);
+            if not eval_expr() then
                 exit;
-            end;
             // read the "AN" keyword
             if not m_parser.get_token(token, toktype) then begin
                 writeln('ERROR: Unexpected end of file');
@@ -246,24 +221,15 @@ begin
                 exit;
             end;
             // evaluate second operand
-            if eval_expr() <> VT_BOOL then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Invalid operand type to binary math ',
-                    'operator at line ', sr, ', column ', sc);
+            if not eval_expr() then
                 exit;
-            end;
             // add the instruction
             m_code.append(OP_AND, ARG_NULL);
-            eval_expr := VT_BOOL;
         // equality check
         end else if token = 'SAEM' then begin
             // evaluate first operand
-            if eval_expr() <> VT_BOOL then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Invalid operand type to binary math ',
-                    'operator at line ', sr, ', column ', sc);
+            if not eval_expr() then
                 exit;
-            end;
             // read the "AN" keyword
             if not m_parser.get_token(token, toktype) then begin
                 writeln('ERROR: Unexpected end of file');
@@ -276,15 +242,10 @@ begin
                 exit;
             end;
             // evaluate second operand
-            if eval_expr() <> VT_BOOL then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Invalid operand type to binary math ',
-                    'operator at line ', sr, ', column ', sc);
+            if not eval_expr() then
                 exit;
-            end;
             // add the instruction
             m_code.append(OP_EQ, ARG_NULL);
-            eval_expr := VT_BOOL;
         end else begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: "OF" or "SAEM" expected, but got "', token,
@@ -312,12 +273,8 @@ begin
             exit;
         end;
         // evaluate the first operand
-        if eval_expr() <> VT_BOOL then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
         // read the "AN" keyword
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
@@ -330,27 +287,18 @@ begin
             exit;
         end;
         // evaluate the second operand
-        if eval_expr() <> VT_BOOL then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
         // add the instruction
         m_code.append(op, ARG_NULL);
-        eval_expr := VT_BOOL;
     // inequation
-    end else if (token = 'DIFFRINT') then begin
+    end else if token = 'DIFFRINT' then begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: inequation');
 {$ENDIF}
         // evaluate the first operand
-        if eval_expr() <> VT_BOOL then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
         // read the "AN" keyword
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
@@ -363,15 +311,38 @@ begin
             exit;
         end;
         // evaluate the second operand
-        if eval_expr() <> VT_BOOL then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Invalid operand type to binary math operator ',
-                'at line ', sr, ', column ', sc);
+        if not eval_expr() then
             exit;
-        end;
         // add the instruction
         m_code.append(OP_NEQ, ARG_NULL);
-        eval_expr := VT_BOOL;
+    // negation
+    end else if token = 'NOT' then begin
+{$IFDEF DEBUG}
+        writeln('DEBUG: eval_expr: negation');
+{$ENDIF}
+        // evaluate the operand
+        if not eval_expr() then
+            exit;
+        m_code.append(OP_NEG, ARG_NULL);
+    // string concatenation
+    end else if token = 'SMOOSH' then begin
+{$IFDEF DEBUG}
+        writeln('DEBUG: eval_expr: string concatenation');
+{$ENDIF}
+        while true do begin
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if ((toktype = TT_EXPR) and ((token = 'MKAY')
+                or ((length(token) = 1) and (token[1] in [chr(10), chr(13)]))))
+                then
+                break;
+            m_parser.unget_token;
+            if not eval_expr() then
+                exit;
+            m_code.append(OP_CONCAT, ARG_NULL);
+        end;
     // string constant
     end else if toktype = TT_STRING then begin
 {$IFDEF DEBUG}
@@ -382,11 +353,13 @@ begin
         v^ := islip_var.create(token);
         // generate the instructions
         m_code.append(OP_PUSH, m_vars.append(v, token));
-        eval_expr := VT_STRING;
-    // either a variable identifier or a numerical constant
+    // either a variable identifier, or a numerical or boolean constant
     end else begin
         // we can detect number literals by the first character
         if (token[1] in ['0'..'9']) or (token[1] = '-') then begin
+{$IFDEF DEBUG}
+            writeln('DEBUG: eval_expr: numerical constant');
+{$ENDIF}        
             floatmath := false;
             // don't switch to floating point math unless we find a radix
             for i := 2 to length(token) do begin
@@ -399,8 +372,7 @@ begin
                         exit;
                     end;
                     floatmath := true;
-                // be a smartass and use a built-in sysutils Pascal function
-                end else if not IsDelimiter('0123456789', token, i) then begin
+                end else if not (token[i] in ['0'..'9']) then begin
                     m_parser.get_pos(sr, sc);
                     writeln('ERROR: Invalid numerical constant at line ',
                         sr, ', column ', sc);
@@ -409,48 +381,61 @@ begin
             end;
             new(v);
             if floatmath then begin
-{$IFDEF fpc}
-                try
-                    f := StrToFloat(token);
-                except
-                    on E : Exception do begin
-                        m_parser.get_pos(sr, sc);
-                        Writeln ('ERROR: Invalid numerical constant at line ',
-                            sr, ', column ', sc);
-                        exit;
-                    end;
+                if not atof(token, @f) then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Invalid numerical constant at line ',
+                        sr, ', column ', sc);
+                    exit;
                 end;
-{$ELSE}
-                f := atof(token);
-{$ENDIF}
                 v^ := islip_var.create(f);
-                eval_expr := VT_FLOAT;
             end else begin
                 try
                     i := StrToInt(token);
                 except
                     on E : Exception do begin
                         m_parser.get_pos(sr, sc);
-                        Writeln ('ERROR: Invalid numerical constant at line ',
+                        writeln('ERROR: Invalid numerical constant at line ',
                             sr, ', column ', sc);
                         exit;
                     end;
                 end;
                 v^ := islip_var.create(i);
-                eval_expr := VT_INT;
             end;
             // generate the instructions
             m_code.append(OP_PUSH, m_vars.append(v, token));
+        // boolean constants
+        end else if token = 'WIN' then begin
+            new(v);
+            v^ := islip_var.create(true);
+            m_code.append(OP_PUSH, m_vars.append(v, token))
+        end else if token = 'FAIL' then begin
+            new(v);
+            v^ := islip_var.create(false);
+            m_code.append(OP_PUSH, m_vars.append(v, token))
         end else begin
             // check for illegal characters
             if not IsValidIdent(token) then begin
                 m_parser.get_pos(sr, sc);
-                Writeln ('ERROR: Invalid characters in identifier at line ',
+                writeln('ERROR: Invalid characters in identifier at line ',
                     sr, ', column ', sc);
                 exit;
             end;
+{$IFDEF DEBUG}
+            writeln('DEBUG: eval_expr: identifier');
+{$ENDIF}
+            // FIXME: search for functions, too
+            i := m_vars.get_var_index(token);
+            if i = 0 then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Unknown identifier "', token, '" at line ',
+                    sr, ', column ', sc);
+                exit;
+            end;
+            // generate the instruction
+            m_code.append(OP_PUSH, i);
         end;
     end;
+    eval_expr := true;
 end;
 
 function islip_compiler.compile : boolean;
@@ -460,9 +445,10 @@ var
     state       : islip_cmp_state;
     sr, sc      : size_t;
     v           : pislip_cmp_var;
-    index       : size_t;
+    bye         : boolean;
 begin
     compile := false;
+    bye := false;
 
     // initialization
     state := CS_UNDEF;
@@ -588,8 +574,7 @@ begin
                     // save off the instruction count
                     sc := m_code.m_count;
                     // evaluate the expression
-                    if eval_expr = VT_UNTYPED then begin
-                        // a variable must be assigned *something*
+                    if not eval_expr() then begin
                         m_parser.get_pos(sr, sc);
                         writeln('ERROR: Unable to evaluate expression at ',
                             'line ', sr, ', column ', sc);
@@ -607,7 +592,7 @@ begin
                         if m_code.m_count - sc = 1 then begin
                             m_code.chop_tail;
                             m_vars.m_tail^.id := id;
-                        end;
+                        end; // FIXME! negated booleans don't work for some reason
                     end;                    
                 end else if token = 'VISIBLE' then begin
                     // put the value on the stack and print it
@@ -626,14 +611,13 @@ begin
                         // TODO: print variables and evaluate expressions
                         // evaluate everything until a newline
                         // get the cursor position in case an error appears
-                        m_parser.get_pos(sr, sc);
-                        if eval_expr = VT_UNTYPED then begin
+                        if not eval_expr() then begin
+                            m_parser.get_pos(sr, sc);
                             writeln('ERROR: Unable to evaluate expression at ',
                                 'line ', sr, ', column ', sc);
                             exit;
                         end;
                         m_code.append(OP_TRAP, TRAP_PRINT);
-                        m_code.append(OP_POP, ARG_NULL);
                     {end else begin
                         // shortcut - create a new var and get it into the list
                         new(v);
@@ -652,6 +636,7 @@ begin
                     // add a STOP and end parsing
                     m_code.append(OP_STOP, ARG_NULL);
                     token := '';
+                    bye := true;
                     break;
                 // skip newlines
                 end else if (length(token) = 1)
@@ -664,6 +649,11 @@ begin
                     exit;
                 end;
         end;
+    end;
+    if not bye then begin
+        writeln('ERROR: Script is missing termination (KTHXBYE)');
+        compile := false;
+        exit;
     end;
     if length(token) > 0 then begin
         writeln('ERROR: Unable to parse script');
@@ -728,6 +718,7 @@ begin
     while p1 <> nil do begin
         p2 := p1;
         p1 := p1^.next;
+        //p2^.v^.destroy;
         dispose(p2^.v);
         dispose(p2);
     end;
@@ -817,6 +808,7 @@ var
 begin
     inc(m_count);
     new(p);
+    //writeln('append ', i, ' ', arg, '! ', m_count, ' ', size_t(m_head), ' ', size_t(m_tail), ' ', size_t(p));
     p^.i := i;
     p^.arg := arg;
     p^.next := nil;
@@ -833,18 +825,21 @@ procedure islip_cmp_code_cont.chop_tail;
 var
     p   : pislip_cmp_inst;
 begin
-    if m_tail <> nil then begin
-        p := m_head;
-        while p^.next <> nil do
-            p := p^.next;
-        if p <> nil then
-            p^.next := nil;
+    //writeln('chop! ', m_count, ' ', size_t(m_head), ' ', size_t(m_tail));
+    if m_tail = nil then
+        exit;
+    dec(m_count);
+    if m_head = m_tail then begin
+        m_head := nil;
         dispose(m_tail);
-        if m_head = m_tail then
-            m_head := nil;
-        m_tail := p;    // this would be nil anyway
-        dec(m_count);
+        m_tail := nil;
+        exit;
     end;
+    p := m_head;
+    while p^.next <> m_tail do
+        p := p^.next;
+    dispose(p^.next);
+    m_tail := p;
 end;
 
 end.

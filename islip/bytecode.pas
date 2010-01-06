@@ -88,28 +88,39 @@ const
     // result: pops the two top-most variables and pushes the operation result
     OP_NEQ          =   $0E;
 
+    // NEG: boolean negation of the top-most stack variable
+    // args: n/a
+    // result: pops the top-most variable and pushes the operation result
+    OP_NEG          =   $0F;
+
+    // CONCAT: concatenates two top-most strings on the stack (will cast if
+    // necessary)
+    // args: n/a
+    // result: pops the two top-most variables and pushes the operation result
+    OP_CONCAT       =   $10;
+
     // JMP: unconditional jump
     // args: instruction offset to apply
     // result: corresponding pointer arithmetic on the interpreter's instruction
     // pointer
-    OP_JMP          =   $0F;
+    OP_JMP          =   $11;
 
     // CNDJMP: conditional jump (if top of the stack < 0)
     // args: instruction offset to apply if condition is true
     // result: corresponding pointer arithmetic on the interpreter's instruction
     // pointer
-    OP_CNDJMP       =   $10;
+    OP_CNDJMP       =   $12;
 
     // TRAP: call an interpreter trap
     // args: ID of the routine to call
     // result: n/a
-    OP_TRAP         =   $11;
+    OP_TRAP         =   $13;
 
     // CALL: call a function (defined in LOLCODE); assumes that parameters are
     // on the stack (stdcall convention)
     // args: function index
     // result: function's return value on top of the stack
-    OP_CALL         =   $12;
+    OP_CALL         =   $14;
 
     // ====================================================
     // interpreter traps
