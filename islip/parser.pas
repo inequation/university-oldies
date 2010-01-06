@@ -64,6 +64,7 @@ type
             m_col       : size_t;
             m_token     : string;
             m_prevtoken : string;
+            m_prevtype  : islip_parser_token_type;
     end;
 
 implementation
@@ -111,6 +112,7 @@ begin
     m_reader := islip_reader.create(input);
     m_token := '';
     m_prevtoken := '';
+    m_prevtype := TT_WS;
 end;
 
 function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
@@ -126,6 +128,7 @@ begin
     // if we still have something to throw, do it
     if length(m_token) > 0 then begin
         s := m_token;
+        t := m_prevtype;
         m_prevtoken := m_token;
         m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the
         m_token := '';           // string to be zeroed in FPC
@@ -147,6 +150,7 @@ begin
                         m_token := c;
                         s := m_token;
                         m_prevtoken := m_token;
+                        m_prevtype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -159,11 +163,12 @@ begin
                 end;
             TT_EXPR:
                 begin
-                if c in [chr(10), chr(13), ','] then begin
+                    if c in [chr(10), chr(13), ','] then begin
                         // throw what we've got so far and keep that newline in
                         // mind
                         s := m_token;
                         m_prevtoken := m_token;
+                        m_prevtype := t;
                         m_token := c;
                         exit;
                     end else if ord(c) > 32 then
@@ -171,6 +176,7 @@ begin
                     else begin
                         s := m_token;
                         m_prevtoken := m_token;
+                        m_prevtype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -179,9 +185,10 @@ begin
             TT_STRING:
                 begin
                     if c = ':' then begin
-                        if esc then
-                            m_token := m_token + c
-                        else
+                        if esc then begin
+                            m_token := m_token + c;
+                            esc := false;
+                        end else
                             esc := true;
                     end else if esc then begin
                         if c = ')' then
@@ -201,6 +208,7 @@ begin
                     else begin
                         s := m_token;
                         m_prevtoken := m_token;
+                        m_prevtype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -224,15 +232,22 @@ begin
         get_token := false;
         // make sure token is nonempty
         s := '!';
-    end else
-        // return an empty token on eof
-        s := '';
+    end else begin
+        // return the last token on eof
+        s := m_token;
+        m_prevtoken := m_token;
+        m_prevtype := t;
+        m_token[1] := chr(0);    // HACK HACK HACK! somehow
+        m_token := '';
+    end;
 end;
 
 procedure islip_parser.unget_token;
 begin
     if length(m_prevtoken) > 0 then
-        m_token := m_prevtoken;
+        m_token := m_prevtoken
+    else
+        writeln('WARNING: Attempted to unget twice in a row');
 end;
 
 procedure islip_parser.get_pos(var row : size_t; var col : size_t);

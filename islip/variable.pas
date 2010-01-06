@@ -709,6 +709,7 @@ begin
                 pb1^ := temp;
             end;
     end;
+    logic := true;
 end;
 
 procedure islip_var.concat(other : pislip_var);

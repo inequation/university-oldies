@@ -105,32 +105,37 @@ const
     // pointer
     OP_JMP          =   $11;
 
-    // CNDJMP: conditional jump (if top of the stack < 0)
-    // args: instruction offset to apply if condition is true
+    // CNDJMP: conditional jump (if the implicit "IT" variable is *false*)
+    // args: instruction offset to apply
     // result: corresponding pointer arithmetic on the interpreter's instruction
     // pointer
     OP_CNDJMP       =   $12;
-
-    // TRAP: call an interpreter trap
-    // args: ID of the routine to call
-    // result: n/a
-    OP_TRAP         =   $13;
 
     // CALL: call a function (defined in LOLCODE); assumes that parameters are
     // on the stack (stdcall convention)
     // args: function index
     // result: function's return value on top of the stack
-    OP_CALL         =   $14;
+    OP_CALL         =   $13;
 
-    // ====================================================
-    // interpreter traps
-    // ====================================================
+    // RETURN: return control from a function
+    // args: n/a
+    // result: control is returned to higher-level code block
+    OP_RETURN       =   $14;
 
     // PRINT: prints the top of the stack to stdio
-    TRAP_PRINT      =   $00;
+    // args: n/a
+    // result: n/a
+    OP_PRINT        =   $15;
 
-    // LINEFEED: prints a line feed to stdout and flushes the buffer
-    TRAP_LINEFEED   =   $01;
+    // READ: reads a string from stdin onto the top of the stack
+    // args: n/a
+    // result: n/a
+    OP_READ         =   $16;
+
+    // CAST: casts the value on the top of the stack to a given type
+    // args: ID of the type to cast to
+    // result: n/a
+    OP_CAST         =   $17;
 
     // ====================================================
     // special arguments

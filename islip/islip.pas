@@ -25,6 +25,7 @@ type
     // container for command line options
     islip_options   = record
         script_fname    : string;
+        pseudoasm       : boolean;
     end;
 
 var
@@ -41,14 +42,38 @@ var
 
 // parse command line arguments, return false if the user's done something wrong
 function islip_parse_args : boolean;
+var
+    i   : int;
 begin
     // initialization
-    islip_parse_args := true;
+    islip_parse_args := false;
+    with g_options do begin
+        script_fname := '';
+        pseudoasm := false;
+    end;
 
     if ParamCount < 1 then
-        islip_parse_args := false;
+        exit;
 
-    g_options.script_fname := ParamStr(1);
+    i := 1;
+    while i <= ParamCount do begin
+        if ParamStr(i)[1] <> '-' then
+            break;
+        if length(ParamStr(i)) = 2 then
+            case ParamStr(i)[2] of
+                'g':
+                    g_options.pseudoasm := true;
+                else
+                    exit;
+            end;
+        inc(i);
+    end;
+
+    if i <> ParamCount then
+        exit;
+
+    g_options.script_fname := ParamStr(ParamCount);
+    islip_parse_args := true;
 end;
 
 // print instructions
@@ -57,7 +82,9 @@ begin
     writeln('islip - IneQuation''s Simple LOLCODE Interpreter in Pascal');
     writeln('Written by Leszek "IneQuation" Godlewski ',
         '<leszgod081@student.polsl.pl>');
-    writeln('Usage: ', ParamStr(0), ' <SCRIPT FILE>');
+    writeln('Usage: ', ParamStr(0), ' [OPTIONS] <SCRIPT FILE>');
+    writeln('Options:');
+    writeln('  -g      Output pseudo-assembly code for debugging');
 end;
 
 // open the script file, return false on failure
@@ -83,8 +110,7 @@ procedure islip_asm_print;
 var
     i   : integer;
 begin
-    writeln('------ BEGIN PSEUDO-ASM BLOCK -------');
-    writeln('.data:');
+    writeln('segment .data');
     for i := 1 to length(g_data) do begin
         write('  0x', IntToHex(i, 8), ' = ');
         if g_data[i].get_type = VT_STRING then
@@ -95,7 +121,7 @@ begin
         writeln;
     end;
     writeln;
-    writeln('.text:');
+    writeln('segment .text');
     for i := 1 to length(g_bytecode) do begin
         case g_bytecode[i].inst of
             OP_STOP:
@@ -115,52 +141,45 @@ begin
                         writeln('  pop    0x', IntToHex(g_bytecode[i].arg, 8));
                 end;
             OP_ADD:
-                writeln('  add   ');
+                writeln('  add');
             OP_SUB:
-                writeln('  sub   ');
+                writeln('  sub');
             OP_MUL:
-                writeln('  mul   ');
+                writeln('  mul');
             OP_DIV:
-                writeln('  div   ');
+                writeln('  div');
             OP_MOD:
-                writeln('  mod   ');
+                writeln('  mod');
             OP_MIN:
-                writeln('  min   ');
+                writeln('  min');
             OP_MAX:
-                writeln('  max   ');
+                writeln('  max');
             OP_AND:
-                writeln('  and   ');
+                writeln('  and');
             OP_OR:
-                writeln('  or    ');
+                writeln('  or');
             OP_XOR:
-                writeln('  xor   ');
+                writeln('  xor');
             OP_EQ:
-                writeln('  eq    ');
+                writeln('  eq');
             OP_NEQ:
-                writeln('  neq   ');
+                writeln('  neq');
             OP_NEG:
-                writeln('  neg   ');
+                writeln('  neg');
             OP_CONCAT:
-                writeln('  cncat ');
+                writeln('  concat');
             OP_JMP:
                 writeln('  jmp    ', g_bytecode[i].arg);
             OP_CNDJMP:
                 writeln('  cndjmp ', g_bytecode[i].arg);
-            OP_TRAP:
-                begin
-                    write('  trap   ');
-                    case g_bytecode[i].arg of
-                        TRAP_PRINT:
-                            writeln('PRINT');
-                        TRAP_LINEFEED:
-                            writeln('LINEFEED');
-                    end;
-                end;
+            OP_PRINT:
+                writeln('  print');
+            OP_READ:
+                writeln('  read');
             OP_CALL:
-                writeln(' call   0x', IntToHex(g_bytecode[i].arg, 8));
+                writeln('  call   0x', IntToHex(g_bytecode[i].arg, 8));
         end;
     end;
-    writeln('------- END PSEUDO-ASM BLOCK --------');
 end;
 
 // main routine
@@ -187,17 +206,17 @@ begin
     islip_file_close;
     // retrieve compilation products
     g_compiler.get_products(g_bytecode, g_data);
-
-    // output pseudo-asm, if requested
-    // FIXME
-    islip_asm_print;
-
     g_compiler.destroy;
 
-    // run the bytecode
-    g_interpreter := islip_interpreter.create(32, g_bytecode, g_data);
-    g_interpreter.run;
-    g_interpreter.destroy;
+    // output pseudo-asm, if requested
+    if g_options.pseudoasm then
+        islip_asm_print
+    else begin
+        // run the bytecode
+        g_interpreter := islip_interpreter.create(32, g_bytecode, g_data);
+        g_interpreter.run;
+        g_interpreter.destroy;
+    end;
 
     // kthxbai!
 end.

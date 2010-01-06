@@ -67,8 +67,8 @@ type
             constructor create;
             destructor destroy; override;
 
-            // appends the new instruction to the list and returns its index
-            procedure append(i : byte; arg : size_t);
+            // appends the new instruction to the list and returns its pointer
+            function append(i : byte; arg : size_t) : pislip_cmp_inst;
             // removes the last element from the list
             procedure chop_tail;
     end;
@@ -87,7 +87,13 @@ type
             m_code      : islip_cmp_code_cont;
             m_done      : boolean;
 
+            // evaluates the upcoming statement
+            function eval_statement : boolean;
+            // evaluates the upcoming expression
             function eval_expr : boolean;
+
+            // optimizes some instruction combinations
+            procedure optimize(start : pislip_cmp_inst);
     end;
 
 implementation
@@ -329,19 +335,25 @@ begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: string concatenation');
 {$ENDIF}
+        // reuse the variable; here it means "we have more than 1 operand"
+        floatmath := false;
         while true do begin
             if not m_parser.get_token(token, toktype) then begin
                 writeln('ERROR: Unexpected end of file');
                 exit;
             end;
-            if ((toktype = TT_EXPR) and ((token = 'MKAY')
-                or ((length(token) = 1) and (token[1] in [chr(10), chr(13)]))))
+            if ((toktype = TT_EXPR) and (token = 'MKAY'))
+                or ((length(token) = 1) and (token[1] in [chr(10), chr(13)]))
                 then
                 break;
             m_parser.unget_token;
             if not eval_expr() then
                 exit;
-            m_code.append(OP_CONCAT, ARG_NULL);
+            // only append the instruction if have anything to concat
+            if floatmath then
+                m_code.append(OP_CONCAT, ARG_NULL)
+            else
+                floatmath := true;
         end;
     // string constant
     end else if toktype = TT_STRING then begin
@@ -405,10 +417,16 @@ begin
             m_code.append(OP_PUSH, m_vars.append(v, token));
         // boolean constants
         end else if token = 'WIN' then begin
+{$IFDEF DEBUG}
+            writeln('DEBUG: eval_expr: boolean constant');
+{$ENDIF}
             new(v);
             v^ := islip_var.create(true);
             m_code.append(OP_PUSH, m_vars.append(v, token))
         end else if token = 'FAIL' then begin
+{$IFDEF DEBUG}
+            writeln('DEBUG: eval_expr: boolean constant');
+{$ENDIF}
             new(v);
             v^ := islip_var.create(false);
             m_code.append(OP_PUSH, m_vars.append(v, token))
@@ -438,14 +456,311 @@ begin
     eval_expr := true;
 end;
 
-function islip_compiler.compile : boolean;
+function islip_compiler.eval_statement : boolean;
 var
     token, id   : string;
     toktype     : islip_parser_token_type;
-    state       : islip_cmp_state;
     sr, sc      : size_t;
     v           : pislip_cmp_var;
-    bye         : boolean;
+    i           : pislip_cmp_inst;
+    pv          : pislip_var;
+begin
+    eval_statement := false;
+
+    if not (m_parser.get_token(token, toktype) and (length(token) > 0)) then begin
+        writeln('ERROR: Unexpected end of file');
+        exit;
+    end;
+    
+    v := nil;
+{$IFDEF DEBUG}
+    writeln('DEBUG: eval_statement: Token: "', token, '", type: ', int(toktype));
+{$ENDIF}
+    {if (token = 'BYES') or (token = 'DIAF') then
+        state := CS_DIE
+    else if token = 'GIMMEH' then
+        state := CS_READ
+    else if token = 'GTFO' then
+        state := CS_BREAK
+    else if token = 'I' then
+        state := CS_VAR
+    else if token = 'IM' then
+        state := CS_LOOP
+    // module inclusion
+    else} if token = 'CAN' then begin
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'HAS' then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: "HAS" expected, but got "', token,
+                '" at line ', sr, ', column ', sc);
+            exit;
+        end;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token[length(token)] = '?' then begin
+            // remove the question mark
+            delete(token, length(token), 1);
+            // see if we recognize the library
+            // FIXME: allow inlcusion of third-party files
+            if (token <> 'STDIO') and (token <> 'MAHZ') then begin
+                writeln('ERROR: Unknown module "', token, '"');
+                exit;
+            end else
+{$IFDEF DEBUG}
+                writeln('DEBUG: Including module "', token, '"');
+{$ENDIF}
+        end;
+    // conditional
+    end else if token = 'O' then begin
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'RLY?' then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: "RLY?" expected, but got "', token, '" at ',
+                 'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'YA' then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: "YA" expected, but got "', token, '" at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+        exit;
+        end;
+        if token <> 'RLY' then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: "RLY" expected, but got "', token, '" at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // save off the instruction information; jump offset will be updated later on
+        i := m_code.append(OP_CNDJMP, ARG_NULL);
+        // evaluate statements until we hit a NO WAI or OIC
+        while m_parser.get_token(token, toktype) and (length(token) > 0) do
+            begin
+            // also check the token type to make sure we're not trying to read
+            // a string constant as a keyword
+            if (toktype = TT_EXPR) and (token = 'NO') then begin
+                // fetch next token
+                if not m_parser.get_token(token, toktype) then begin
+                    writeln('ERROR: Unexpected end of file');
+                    exit;
+                end;
+                if token <> 'WAI' then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln ('ERROR: "WAI" expected, but got "', token,
+                        '" at line ', sr, ', column ', sc);
+                    exit;
+                end;
+                break;
+            end else if token = 'OIC' then
+                break
+            else begin
+                m_parser.unget_token;
+                if not eval_statement() then
+                    exit;   // the recursive instance will have raised an error
+            end;
+        end;
+        // optimize the code we've read so far
+        optimize(i);
+        // do we still have an "else" to parse?
+        if token = 'WAI' then begin
+            // TODO: add an unconditional jump here to after the "else" block
+            // TODO: set the jump offset in i
+            // TODO: evaluate remaining code
+        end else begin
+            // TODO: set the jump offset in i
+        end;
+    end else if token = 'LOL' then begin
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        // check if it's a valid identifier
+        if not IsValidIdent(token) then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: Invalid characters in identifier at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // save off the ID
+        id := token;
+        // now see if it hasn't been used already
+        // try variables first
+        v := m_vars.get_var(id);
+        // now try functions - if we find anything, it's a misused
+        // identifier and therefore a syntax error
+        // TODO
+        {if m_blocks.get_func(token) <> nil then begin
+            end;}
+        // read the next part of the assignment statement
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'R' then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: "R" expected, but got "', token,
+                '" at line ', sr, ', column ', sc);
+            exit;
+        end;
+        // save off the instruction count
+        sc := m_code.m_count;
+        // evaluate the expression
+        if not eval_expr() then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unable to evaluate expression at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // if the variable already exists, it's been initialized
+        // somewhere else already, so just pop the top of the stack
+        // into it
+        if v <> nil then
+            // FIXME: put index into islip_cmp_var
+            m_code.append(OP_POP, m_vars.get_var_index(v^.id))
+        else begin
+            // if the expression generates only 1 instruction, it
+            // must be a constant, so let's reduce instructions
+            if m_code.m_count - sc = 1 then begin
+                m_code.chop_tail;
+                m_vars.m_tail^.id := id;
+            // else we need to calculate the result, so allocate
+            // a new data slot
+            end else begin
+                new(pv);
+                pv^ := islip_var.create;
+                m_code.append(OP_POP, m_vars.append(pv, id));
+            end;
+        end;
+    end else if token = 'MAEK' then begin
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        // check for illegal characters
+        if not IsValidIdent(token) then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Invalid characters in identifier at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        // fail if the variable doesn't exist
+        sr := m_vars.get_var_index(token);
+        if sr = 0 then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unknown identifier "', token, '" at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        // check for "A"
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'A' then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: "A" expected, but got "', token, '" at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        // check for type
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        m_code.append(OP_PUSH, sr);
+        if token = 'NOOB' then
+            m_code.append(OP_CAST, int(VT_UNTYPED))
+        else if token = 'TROOF' then
+            m_code.append(OP_CAST, int(VT_BOOL))
+        else if token = 'NUMBR' then
+            m_code.append(OP_CAST, int(VT_INT))
+        else if token = 'NUMBAR' then
+            m_code.append(OP_CAST, int(VT_FLOAT))
+        else if token = 'YARN' then
+            m_code.append(OP_CAST, int(VT_STRING))
+        else begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Expected a type name, but got "', token, '" at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        m_code.append(OP_POP, sr);
+    end else if token = 'VISIBLE' then begin
+        // put the value on the stack and print it
+        if not eval_expr() then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unable to evaluate expression at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        m_code.append(OP_PRINT, ARG_NULL);
+    end else if token = 'GIMMEH' then begin
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        // check for illegal characters
+        if not IsValidIdent(token) then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Invalid characters in identifier at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        // if the variable doesn't exist, create it
+        sr := m_vars.get_var_index(token);
+        if sr = ARG_NULL then begin
+            new(pv);
+            pv^ := islip_var.create;
+            sr := m_vars.append(pv, token);
+        end;
+        m_code.append(OP_READ, ARG_NULL);
+        m_code.append(OP_POP, sr);
+    end else begin
+        m_parser.unget_token;
+        // try to evaluate the "IT" implied variable, which is
+        // always on slot #1
+        if eval_expr then
+            m_code.append(OP_POP, 1)
+        else begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unknown keyword "', token, '" at line ', sr,
+                ', column ', sc);
+            exit;
+        end;
+    end;
+    eval_statement := true;
+end;
+
+function islip_compiler.compile : boolean;
+var
+    token   : string;
+    toktype : islip_parser_token_type;
+    state   : islip_cmp_state;
+    sr, sc  : size_t;
+    pv      : pislip_var;
+    bye     : boolean;
 begin
     compile := false;
     bye := false;
@@ -453,200 +768,74 @@ begin
     // initialization
     state := CS_UNDEF;
 
+    // create the implied "IT" variable
+    new(pv);
+    pv^ := islip_var.create;
+    m_vars.append(pv, 'IT');
+
     while m_parser.get_token(token, toktype) and (length(token) > 0) do begin
-        v := nil;
 {$IFDEF DEBUG}
-        writeln('DEBUG: Token: "', token, '", state: ', integer(state));
+        writeln('DEBUG: compile: Token: "', token, '" type ', int(toktype), ', state: ', int(state));
 {$ENDIF}
+        // comments first and foremost
+        // FIXME: move comment handling to parser (ya, rly!)
+        if token = 'BTW' then begin
+            // skip everything until a newline comes up
+            while true do begin
+                if not m_parser.get_token(token, toktype) then begin
+                    writeln('ERROR: Unexpected end of file');
+                    exit;
+                end;
+                if (length(token) = 1)
+                    and (token[1] in [chr(10), chr(13)]) then
+                    break;
+            end;
+            continue;
+        // also skip newlines
+        end else if (length(token) = 1)
+            and (token[1] in [chr(10), chr(13)]) then
+            continue;
+            
         case state of
             CS_UNDEF:
-                if token <> 'HAI' then begin
-                    m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unknown token "', token, '" at line ', sr,
-                        ', column ', sc);
-                    exit;
-                end else
-                    state := CS_START;
-            CS_START:
-                if (token <> LOLCODE_VERSION)
-                    and not (token[1] in [chr(10), chr(13)]) then begin
-                    m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unsupported language version "', token,
-                        '" at line ', sr, ', column ', sc);
-                    exit;
-                end else
-                    state := CS_STATEMENT;
+                begin
+                    if token <> 'HAI' then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln('ERROR: Unknown token "', token, '" at line ', sr,
+                            ', column ', sc);
+                        exit;
+                    end;
+                    if not m_parser.get_token(token, toktype) then begin
+                        writeln('ERROR: Unexpected end of file');
+                        exit;
+                    end;
+                    // the version number might've been omitted
+                    if (length(token) = 1)
+                        and (token[1] in [chr(10), chr(13)]) then begin
+                        state := CS_STATEMENT;
+                        continue;
+                    end;
+                    if token <> LOLCODE_VERSION then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln('ERROR: Unsupported language version "', token,
+                            '" at line ', sr, ', column ', sc);
+                        exit;
+                    end;
+                end;
             CS_STATEMENT:
-                // comment
-                // FIXME: move comment handling to parser (ya, rly!)
-                if token = 'BTW' then begin
-                    // skip everything until a newline comes up
-                    while true do begin
-                        if not m_parser.get_token(token, toktype) then begin
-                            writeln('ERROR: Unexpected end of file');
-                            exit;
-                        end;
-                        if (length(token) = 1)
-                            and (token[1] in [chr(10), chr(13)]) then
-                            break;
+                begin
+                    // end of program
+                    if token = 'KTHXBYE' then begin
+                        m_code.append(OP_STOP, ARG_NULL);
+                        token := '';
+                        bye := true;
+                        break;
                     end;
-                    continue;
-                // module inclusion
-                end else if token = 'CAN' then begin
-                    // fetch next token
-                    if not m_parser.get_token(token, toktype) then begin
-                        writeln('ERROR: Unexpected end of file');
-                        exit;
+                    // unget token for reevaluation
+                    m_parser.unget_token;
+                    if not eval_statement then begin
+
                     end;
-                    if token <> 'HAS' then begin
-                        m_parser.get_pos(sr, sc);
-                        writeln('ERROR: "HAS" expected, but got "', token,
-                            '" at line ', sr, ', column ', sc);
-                        exit;
-                    end else begin
-                        // fetch next token
-                        if not m_parser.get_token(token, toktype) then begin
-                            writeln('ERROR: Unexpected end of file');
-                            exit;
-                        end;
-                        if token[length(token)] = '?' then begin
-                            // remove the question mark
-                            delete(token, length(token), 1);
-                            // see if we recognize the library
-                            // FIXME: allow inlcusion of third-party files
-                            if (token <> 'STDIO') and (token <> 'MAHZ') then
-                                begin
-                                writeln('ERROR: Unknown module "', token, '"');
-                                exit;
-                            end else
-                                state := CS_STATEMENT;
-{$IFDEF DEBUG}
-                            writeln('DEBUG: Including module "', token, '"');
-{$ENDIF}
-                        end;
-                    end;
-                end {else if (token = 'BYES') or (token = 'DIAF') then
-                    state := CS_DIE
-                else if token = 'GIMMEH' then
-                    state := CS_READ
-                else if token = 'GTFO' then
-                    state := CS_BREAK
-                else if token = 'I' then
-                    state := CS_VAR
-                else if token = 'IM' then
-                    state := CS_LOOP
-                else if token = 'IZ' then
-                    state := CS_COND}
-                else if token = 'LOL' then begin
-                    // fetch next token
-                    if not m_parser.get_token(token, toktype) then begin
-                        writeln('ERROR: Unexpected end of file');
-                        exit;
-                    end;
-                    // check if it's a valid identifier
-                    if not IsValidIdent(token) then begin
-                        m_parser.get_pos(sr, sc);
-                        writeln ('ERROR: Invalid characters in identifier at ',
-                            'line ', sr, ', column ', sc);
-                        exit;
-                    end;
-                    // save off the ID
-                    id := token;
-                    // now see if it hasn't been used already
-                    // try variables first
-                    v := m_vars.get_var(id);
-                    // now try functions - if we find anything, it's a misused
-                    // identifier and therefore a syntax error
-                    // TODO
-                    {if m_blocks.get_func(token) <> nil then begin
-                    end;}
-                    // read the next part of the assignment statement
-                    if not m_parser.get_token(token, toktype) then begin
-                        writeln('ERROR: Unexpected end of file');
-                        exit;
-                    end;
-                    if token <> 'R' then begin
-                        m_parser.get_pos(sr, sc);
-                        writeln('ERROR: "R" expected, but got "', token,
-                            '" at line ', sr, ', column ', sc);
-                        exit;
-                    end;
-                    // save off the instruction count
-                    sc := m_code.m_count;
-                    // evaluate the expression
-                    if not eval_expr() then begin
-                        m_parser.get_pos(sr, sc);
-                        writeln('ERROR: Unable to evaluate expression at ',
-                            'line ', sr, ', column ', sc);
-                        exit;
-                    end;
-                    // if the variable already exists, it's been initialized
-                    // somewhere else already, so just pop the top of the stack
-                    // into it
-                    if v <> nil then
-                        // FIXME: put index into islip_cmp_var
-                        m_code.append(OP_POP, m_vars.get_var_index(v^.id))
-                    else begin
-                        // if the expression generates only 1 instruction, it
-                        // must be a constant, so let's reduce instructions
-                        if m_code.m_count - sc = 1 then begin
-                            m_code.chop_tail;
-                            m_vars.m_tail^.id := id;
-                        end; // FIXME! negated booleans don't work for some reason
-                    end;                    
-                end else if token = 'VISIBLE' then begin
-                    // put the value on the stack and print it
-                    {if not m_parser.get_token(token, toktype)
-                        or ((length(token) = 1)
-                        and (token[1] in [chr(10), chr(13)])) then begin
-                        writeln('ERROR: Unexpected end of file');
-                        exit;
-                    end;}
-{$IFDEF DEBUG}
-                    writeln('DEBUG: Printing: "', token, '", state: ',
-                        integer(state));
-{$ENDIF}
-                    // FIXME: rewrite this to use expression evaluation ONLY
-                    //if toktype = TT_EXPR then begin
-                        // TODO: print variables and evaluate expressions
-                        // evaluate everything until a newline
-                        // get the cursor position in case an error appears
-                        if not eval_expr() then begin
-                            m_parser.get_pos(sr, sc);
-                            writeln('ERROR: Unable to evaluate expression at ',
-                                'line ', sr, ', column ', sc);
-                            exit;
-                        end;
-                        m_code.append(OP_TRAP, TRAP_PRINT);
-                    {end else begin
-                        // shortcut - create a new var and get it into the list
-                        new(v);
-                        v^ := islip_var.create(token);
-                        index := m_vars.append(v, token);
-                        // generate the instructions
-                        m_code.append(OP_PUSH, index);
-                        m_code.append(OP_TRAP, TRAP_PRINT);
-                        m_code.append(OP_POP, ARG_NULL);
-                    end;}
-                    // add a line feed
-                    m_code.append(OP_TRAP, TRAP_LINEFEED);
-                    continue;
-                // program end
-                end else if token = 'KTHXBYE' then begin
-                    // add a STOP and end parsing
-                    m_code.append(OP_STOP, ARG_NULL);
-                    token := '';
-                    bye := true;
-                    break;
-                // skip newlines
-                end else if (length(token) = 1)
-                    and (token[1] in [chr(10), chr(13)]) then
-                    continue
-                else begin
-                    m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Unknown keyword "', token, '" at line ', sr,
-                        ', column ', sc);
-                    exit;
                 end;
         end;
     end;
@@ -660,8 +849,13 @@ begin
         compile := false;
         exit;
     end;
+    optimize(m_code.m_head);
     m_done := true;
     compile := true;
+end;
+
+procedure islip_compiler.optimize(start : pislip_cmp_inst);
+begin
 end;
 
 procedure islip_compiler.get_products(var c : islip_bytecode;
@@ -802,7 +996,7 @@ begin
     end;
 end;
 
-procedure islip_cmp_code_cont.append(i : byte; arg : size_t);
+function islip_cmp_code_cont.append(i : byte; arg : size_t) : pislip_cmp_inst;
 var
     p   : pislip_cmp_inst;
 begin
@@ -819,6 +1013,7 @@ begin
         m_tail^.next := p;
         m_tail := p;
     end;
+    append := p;
 end;
 
 procedure islip_cmp_code_cont.chop_tail;

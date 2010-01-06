@@ -58,6 +58,7 @@ var
     i   : int;
     pv  : pislip_var;
     v   : islip_var;
+    s   : string;
 begin
     for i := 1 to length(m_code^) do begin
         case m_code^[i].inst of
@@ -88,6 +89,7 @@ begin
                     if not pv^.math(@v, m_code^[i].inst) then begin
                         writeln('RUNTIME ERROR: Invalid operands to ',
                             'arithmetic operator at 0x', IntToHex(i, 8));
+                        exit;
                     end;
                 end;
             OP_NEG:
@@ -108,6 +110,7 @@ begin
                     if not pv^.logic(@v, m_code^[i].inst) then begin
                         writeln('RUNTIME ERROR: Invalid operands to ',
                             'logical operator at 0x', IntToHex(i, 8));
+                        exit;
                     end;
                 end;
             OP_CONCAT:
@@ -116,16 +119,21 @@ begin
                     pv := m_stack.peek;
                     pv^.concat(@v);
                 end;
-            OP_TRAP:
-                case m_code^[i].arg of
-                    TRAP_PRINT:
-                        begin
-                            m_stack.pop(@v);
-                            v.echo;
-                        end;
-                    TRAP_LINEFEED:
-                        writeln;
+            OP_PRINT:
+                begin
+                    m_stack.pop(@v);
+                    v.echo;
+                    writeln;
                 end;
+            OP_READ:
+                begin
+                    readln(s);
+                    new(pv);
+                    pv^ := islip_var.create(s);
+                    m_stack.push(pv);
+                end;
+            OP_CAST:
+                (m_stack.peek)^.cast(islip_type(m_code^[i].arg));
             else begin
                 writeln('ERROR: Invalid instruction 0x',
                     IntToHex(m_code^[i].inst, 2), ', possibly corrupt bytecode ',
@@ -149,8 +157,9 @@ end;
 procedure islip_stack.push(pv : pislip_var);
 begin
     if m_top = length(m_stack) then begin
-        writeln('ERROR: Stack overflow');
-        exit;
+        //writeln('ERROR: Stack overflow');
+        //exit;
+        setlength(m_stack, length(m_stack) * 2);
     end;
     inc(m_top);
     if pv <> nil then
@@ -162,7 +171,7 @@ end;
 procedure islip_stack.pop(pv : pislip_var);
 begin
     if m_top <= 0 then begin
-        writeln('ERROR: Stack underflow');
+        writeln('RUNTIME ERROR: Stack underflow');
         exit;
     end;
     if pv <> nil then
@@ -172,8 +181,8 @@ end;
 
 function islip_stack.peek : pislip_var;
 begin
-    if m_top < 1 then begin
-        writeln('ERROR: Peeking into an empty stack');
+    if m_top <= 0 then begin
+        writeln('RUNTIME ERROR: Peeking into an empty stack');
         exit;
     end;
     peek := @m_stack[m_top];
