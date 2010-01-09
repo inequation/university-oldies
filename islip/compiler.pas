@@ -54,7 +54,7 @@ type
     islip_cmp_inst      = record
         next            : pislip_cmp_inst;
         i               : byte;
-        arg             : size_t;
+        arg             : int;
     end;
 
     // instruction container
@@ -127,6 +127,7 @@ begin
     m_code.destroy;
 end;
 
+// recursive expression evaluator
 function islip_compiler.eval_expr : boolean;
 var
     token       : string;
@@ -456,6 +457,7 @@ begin
     eval_expr := true;
 end;
 
+// recursive statement evaluator
 function islip_compiler.eval_statement : boolean;
 var
     token, id   : string;
@@ -464,6 +466,7 @@ var
     v           : pislip_cmp_var;
     i           : pislip_cmp_inst;
     pv          : pislip_var;
+    ofs         : int;
 begin
     eval_statement := false;
 
@@ -471,23 +474,19 @@ begin
         writeln('ERROR: Unexpected end of file');
         exit;
     end;
+
+    // skip newlines
+    if (length(token) = 1)
+        and (token[1] in [chr(10), chr(13)]) then begin
+        eval_statement := true;
+        exit;
+    end;
     
     v := nil;
 {$IFDEF DEBUG}
     writeln('DEBUG: eval_statement: Token: "', token, '", type: ', int(toktype));
 {$ENDIF}
-    {if (token = 'BYES') or (token = 'DIAF') then
-        state := CS_DIE
-    else if token = 'GIMMEH' then
-        state := CS_READ
-    else if token = 'GTFO' then
-        state := CS_BREAK
-    else if token = 'I' then
-        state := CS_VAR
-    else if token = 'IM' then
-        state := CS_LOOP
-    // module inclusion
-    else} if token = 'CAN' then begin
+    if token = 'CAN' then begin
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
@@ -530,21 +529,26 @@ begin
                  'line ', sr, ', column ', sc);
             exit;
         end;
+        // fetch next token; there may be newlines here
+        while true do begin
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if (length(token) = 1) and (token[1] in [chr(10), chr(13)]) then
+                continue
+            else if token <> 'YA' then begin
+                m_parser.get_pos(sr, sc);
+                writeln ('ERROR: "YA" expected, but got "', token, '" at ',
+                    'line ', sr, ', column ', sc);
+                exit;
+            end else
+                break;
+        end;
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
             exit;
-        end;
-        if token <> 'YA' then begin
-            m_parser.get_pos(sr, sc);
-            writeln ('ERROR: "YA" expected, but got "', token, '" at ',
-                'line ', sr, ', column ', sc);
-            exit;
-        end;
-        // fetch next token
-        if not m_parser.get_token(token, toktype) then begin
-            writeln('ERROR: Unexpected end of file');
-        exit;
         end;
         if token <> 'RLY' then begin
             m_parser.get_pos(sr, sc);
@@ -552,14 +556,19 @@ begin
                 'line ', sr, ', column ', sc);
             exit;
         end;
+        // push IT onto the stack
+        m_code.append(OP_PUSH, 1);
         // save off the instruction information; jump offset will be updated later on
         i := m_code.append(OP_CNDJMP, ARG_NULL);
+        ofs := int(m_code.m_count);
         // evaluate statements until we hit a NO WAI or OIC
         while m_parser.get_token(token, toktype) and (length(token) > 0) do
             begin
+            if (token = 'MEBBE') or (token = 'OIC') then
+                break
             // also check the token type to make sure we're not trying to read
             // a string constant as a keyword
-            if (toktype = TT_EXPR) and (token = 'NO') then begin
+            else if (toktype = TT_EXPR) and (token = 'NO') then begin
                 // fetch next token
                 if not m_parser.get_token(token, toktype) then begin
                     writeln('ERROR: Unexpected end of file');
@@ -572,9 +581,7 @@ begin
                     exit;
                 end;
                 break;
-            end else if token = 'OIC' then
-                break
-            else begin
+            end else begin
                 m_parser.unget_token;
                 if not eval_statement() then
                     exit;   // the recursive instance will have raised an error
@@ -582,14 +589,34 @@ begin
         end;
         // optimize the code we've read so far
         optimize(i);
-        // do we still have an "else" to parse?
+        // do we still have an "else" or "elseif" to parse?
         if token = 'WAI' then begin
-            // TODO: add an unconditional jump here to after the "else" block
-            // TODO: set the jump offset in i
-            // TODO: evaluate remaining code
-        end else begin
-            // TODO: set the jump offset in i
+            // update jump offset; add 1 to account for the jump instruction
+            // we're about to add
+            i^.arg := m_code.m_count - ofs + 1;
+            // finish the success block with an unconditional jump to after the
+            // else block; save off the instruction information; jump offset
+            // will be updated later on
+            i := m_code.append(OP_JMP, ARG_NULL);
+            ofs := int(m_code.m_count);
+            // evaluate statements until we hit an OIC
+            while m_parser.get_token(token, toktype) and (length(token) > 0) do
+                begin
+                // also check the token type to make sure we're not trying to
+                // read a string constant as a keyword
+                if token = 'OIC' then
+                    break
+                else begin
+                    m_parser.unget_token;
+                    if not eval_statement() then
+                        exit;   // the recursive instance will have raised an error
+                end;
+            end;
+            // optimize the code we've read so far
+            optimize(i);
         end;
+        // update jump offset
+        i^.arg := m_code.m_count - ofs;
     end else if token = 'LOL' then begin
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
@@ -777,24 +804,6 @@ begin
 {$IFDEF DEBUG}
         writeln('DEBUG: compile: Token: "', token, '" type ', int(toktype), ', state: ', int(state));
 {$ENDIF}
-        // comments first and foremost
-        // FIXME: move comment handling to parser (ya, rly!)
-        if token = 'BTW' then begin
-            // skip everything until a newline comes up
-            while true do begin
-                if not m_parser.get_token(token, toktype) then begin
-                    writeln('ERROR: Unexpected end of file');
-                    exit;
-                end;
-                if (length(token) = 1)
-                    and (token[1] in [chr(10), chr(13)]) then
-                    break;
-            end;
-            continue;
-        // also skip newlines
-        end else if (length(token) = 1)
-            and (token[1] in [chr(10), chr(13)]) then
-            continue;
             
         case state of
             CS_UNDEF:
@@ -821,6 +830,7 @@ begin
                             '" at line ', sr, ', column ', sc);
                         exit;
                     end;
+                    state := CS_STATEMENT;
                 end;
             CS_STATEMENT:
                 begin
@@ -834,28 +844,50 @@ begin
                     // unget token for reevaluation
                     m_parser.unget_token;
                     if not eval_statement then begin
-
+                        //writeln('ERROR: Unable to parse script');
+                        compile := false;
+                        exit;
                     end;
                 end;
         end;
     end;
     if not bye then begin
-        writeln('ERROR: Script is missing termination (KTHXBYE)');
+        writeln('ERROR: Script is missing termination ("KTHXBYE")');
         compile := false;
         exit;
     end;
-    if length(token) > 0 then begin
-        writeln('ERROR: Unable to parse script');
-        compile := false;
-        exit;
-    end;
+    // run optimizations
     optimize(m_code.m_head);
     m_done := true;
     compile := true;
 end;
 
+// FIXME: try to make it context-sensitive so that it doesn't break code
 procedure islip_compiler.optimize(start : pislip_cmp_inst);
+{var
+    prev, temp  : pislip_cmp_inst;}
 begin
+    {prev := nil;
+    repeat
+        // unlink contiguous pops and pushes of the same variable
+        if (start^.next <> nil) and (start^.i = OP_POP)
+            and (start^.next^.i = OP_PUSH) and (start^.arg = start^.next^.arg)
+            then begin
+            // unlink the instructions
+            if prev <> nil then
+                prev^.next := start^.next^.next
+            else
+                m_code.m_head := start^.next^.next;
+            temp := start;
+            start := start^.next^.next;
+            dispose(temp^.next);
+            dispose(temp);
+            dec(m_code.m_count, 2);
+        end else begin
+            prev := start;
+            start := start^.next;
+        end;
+    until start = nil;}
 end;
 
 procedure islip_compiler.get_products(var c : islip_bytecode;

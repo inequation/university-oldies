@@ -35,6 +35,9 @@ type
             // does a cast to target type
             function cast(target : islip_type) : boolean;
 
+            // evaluates the variable to a bool and returns
+            function get_bool : boolean;
+
             // math operation; assumes "self" as the first operand and
             // destination of result; op is the opcode
             function math(other : pislip_var; op : byte) : boolean;
@@ -721,6 +724,37 @@ begin
     ps1 := m_valptr;
     ps2 := other^.m_valptr;
     ps1^ := ps1^ + ps2^;
+end;
+
+function islip_var.get_bool : boolean;
+var
+    pb  : ^boolean;
+    pi  : ^int;
+    pf  : ^float;
+    ps  : ^string;
+begin
+    if m_type = VT_BOOL then begin
+        pb := m_valptr;
+        get_bool := pb^;
+    end else case m_type of
+        VT_UNTYPED:
+            get_bool := false;
+        VT_INT:
+            begin
+                pi := m_valptr;
+                get_bool := pi^ <> 0;
+            end;
+        VT_FLOAT:
+            begin
+                pf := m_valptr;
+                get_bool := pf^ <> 0.0;
+            end;
+        VT_STRING:
+            begin
+                ps := m_valptr;
+                get_bool := ps^ <> '';
+            end;
+    end;
 end;
 
 end.

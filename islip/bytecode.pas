@@ -150,7 +150,7 @@ type
     // single instruction with the argument
     islip_inst      = record
         inst        : byte;
-        arg         : size_t;
+        arg         : int;
     end;
     
     islip_bytecode  = array of islip_inst;

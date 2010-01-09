@@ -60,7 +60,8 @@ var
     v   : islip_var;
     s   : string;
 begin
-    for i := 1 to length(m_code^) do begin
+    i := 1;
+    while i < length(m_code^) do begin
         case m_code^[i].inst of
             OP_STOP:
                 break;
@@ -134,6 +135,18 @@ begin
                 end;
             OP_CAST:
                 (m_stack.peek)^.cast(islip_type(m_code^[i].arg));
+            OP_JMP:
+                i := i + m_code^[i].arg;
+            OP_CNDJMP:
+                begin
+                    m_stack.pop(@v);
+                    // NOTE: jump occurs if the top of the stack variable is
+                    // FALSE! this is because the success block follows
+                    // immediately, while the "else" block (or further code, if
+                    // there is no "else") appears after the success block
+                    if not v.get_bool then
+                        i := i + m_code^[i].arg;
+                end;
             else begin
                 writeln('ERROR: Invalid instruction 0x',
                     IntToHex(m_code^[i].inst, 2), ', possibly corrupt bytecode ',
@@ -141,6 +154,7 @@ begin
                 exit;
             end;
         end;
+        inc(i);
     end;
 end;
 

@@ -57,6 +57,7 @@ type
             // retrieves current token starting position in input file (for
             // error reporting)
             procedure get_pos(var row : size_t; var col : size_t);
+
         private
             m_reader    : islip_reader;
 
@@ -65,6 +66,8 @@ type
             m_token     : string;
             m_prevtoken : string;
             m_prevtype  : islip_parser_token_type;
+
+            function comment : boolean;
     end;
 
 implementation
@@ -113,6 +116,46 @@ begin
     m_token := '';
     m_prevtoken := '';
     m_prevtype := TT_WS;
+end;
+
+function islip_parser.comment : boolean;
+var
+    c   : char;
+begin
+    comment := false;
+    if m_token = 'BTW' then begin
+        // skip characters until we read a newline and
+        // start a new token
+        while m_reader.get_char(c) do begin
+            if c in [chr(10), chr(13)] then begin
+                m_token := '';
+                break;
+            end;
+        end;
+    end else if m_token = 'OBTW' then begin
+        // skip characters until we read a "TLDR"
+        while m_reader.get_char(c) do begin
+            if c = 'T' then begin
+                if not m_reader.get_char(c) then
+                    exit;
+                if c = 'L' then begin
+                    if not m_reader.get_char(c) then
+                        exit;
+                    if c = 'D' then begin
+                        if not m_reader.get_char(c) then
+                            exit;
+                        if c = 'R' then begin
+                            if not m_reader.get_char(c) then
+                                exit;
+                            m_token := '';
+                            break;
+                        end;
+                    end;
+                end;
+            end;
+        end;
+    end;
+    comment := true;
 end;
 
 function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
@@ -164,6 +207,15 @@ begin
             TT_EXPR:
                 begin
                     if c in [chr(10), chr(13), ','] then begin
+                        // handle comments
+                        if comment then begin
+                            if m_token = '' then
+                                continue;
+                        end else begin
+                            writeln('ERROR: Unterminated multi-line comment');
+                            get_token := false;
+                            exit;
+                        end;
                         // throw what we've got so far and keep that newline in
                         // mind
                         s := m_token;
@@ -174,6 +226,15 @@ begin
                     end else if ord(c) > 32 then
                         m_token := m_token + c
                     else begin
+                        // handle comments
+                        if comment then begin
+                            if m_token = '' then
+                                continue;
+                        end else begin
+                            writeln('ERROR: Unterminated multi-line comment');
+                            get_token := false;
+                            exit;
+                        end;
                         s := m_token;
                         m_prevtoken := m_token;
                         m_prevtype := t;
