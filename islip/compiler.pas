@@ -108,6 +108,13 @@ type
         CS_STATEMENT    // program body, expecting a statement
     );
 
+    islip_flowstate = (
+        FS_LINEAR,      // we're reading a normal, linear code block
+        FS_IF,          // we're reading an "if" block
+        FS_ELSEIF,      // we're reading an "else if" block
+        FS_ELSE         // we're reading an "else" block
+    );
+
 // ====================================================
 // compiler implementation
 // ====================================================
@@ -127,7 +134,10 @@ begin
     m_code.destroy;
 end;
 
+// ====================================================
 // recursive expression evaluator
+// ====================================================
+
 function islip_compiler.eval_expr : boolean;
 var
     token       : string;
@@ -457,16 +467,20 @@ begin
     eval_expr := true;
 end;
 
+// ====================================================
 // recursive statement evaluator
+// ====================================================
+
 function islip_compiler.eval_statement : boolean;
 var
     token, id   : string;
     toktype     : islip_parser_token_type;
     sr, sc      : size_t;
     v           : pislip_cmp_var;
-    i           : pislip_cmp_inst;
     pv          : pislip_var;
+    i           : pislip_cmp_inst;
     ofs         : int;
+    flowstate   : islip_flowstate;
 begin
     eval_statement := false;
 
@@ -529,7 +543,7 @@ begin
                  'line ', sr, ', column ', sc);
             exit;
         end;
-        // fetch next token; there may be newlines here
+        // fetch next token; there may be newlines before it
         while true do begin
             if not m_parser.get_token(token, toktype) then begin
                 writeln('ERROR: Unexpected end of file');
@@ -558,65 +572,84 @@ begin
         end;
         // push IT onto the stack
         m_code.append(OP_PUSH, 1);
-        // save off the instruction information; jump offset will be updated later on
+        // save off the instruction information; jump offset will be updated
+        // later on
         i := m_code.append(OP_CNDJMP, ARG_NULL);
         ofs := int(m_code.m_count);
-        // evaluate statements until we hit a NO WAI or OIC
-        while m_parser.get_token(token, toktype) and (length(token) > 0) do
-            begin
-            if (token = 'MEBBE') or (token = 'OIC') then
-                break
-            // also check the token type to make sure we're not trying to read
-            // a string constant as a keyword
-            else if (toktype = TT_EXPR) and (token = 'NO') then begin
-                // fetch next token
-                if not m_parser.get_token(token, toktype) then begin
-                    writeln('ERROR: Unexpected end of file');
-                    exit;
+        // evaluate statements until we hit another flow control statement
+        flowstate := FS_IF;
+        while m_parser.get_token(token, toktype) do begin
+            // check for the end of the block
+            if token = 'OIC' then
+                flowstate := FS_LINEAR;
+            // this is intentional - there SHOULD NOT be an "else" here!
+            if flowstate = FS_LINEAR then begin
+                // optimize code and update jump offset
+                optimize(i);
+                i^.arg := int(m_code.m_count) - ofs;
+                break;  // end of conditional block altogether
+            end else if flowstate in [FS_IF, FS_ELSEIF] then begin
+                // elseif
+                if token = 'MEBBE' then begin
+                    // optimize the code so far and update the jump offset
+                    // FIXME: add an unconditional jump at the end of every
+                    // success block so that we don't evaluate every damn
+                    // single condition
+                    optimize(i);
+                    i^.arg := int(m_code.m_count) - ofs;
+                    // set next state
+                    flowstate := FS_ELSEIF;
+                    // evaluate the condition
+                    if not eval_expr() then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln('ERROR: Unable to evaluate expression at ',
+                            'line ', sr, ', column ', sc);
+                        exit;
+                    end;
+                    // save off the instruction information; jump offset will
+                    // be updated later on
+                    i := m_code.append(OP_CNDJMP, ARG_NULL);
+                    ofs := int(m_code.m_count);
+                    continue;
+                // else
+                end else if (toktype = TT_EXPR) and (token = 'NO') then
+                    begin
+                    // fetch next token
+                    if not m_parser.get_token(token, toktype) then begin
+                        writeln('ERROR: Unexpected end of file');
+                        exit;
+                    end;
+                    if token <> 'WAI' then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln ('ERROR: "WAI" expected, but got "', token,
+                            '" at line ', sr, ', column ', sc);
+                        exit;
+                    end;
+                    // optimize the code so far and update the jump offset
+                    // the +1 accounts for the unconditional jump we're about
+                    // to add; it's there to skip the "else" block and we
+                    // absolutely need it because there's no condition that can
+                    // be checked
+                    optimize(i);
+                    i^.arg := int(m_code.m_count) - ofs + 1;
+                    // set next state
+                    flowstate := FS_ELSE;
+                    // save off the instruction information; jump offset will
+                    // be updated later on
+                    i := m_code.append(OP_JMP, ARG_NULL);
+                    ofs := int(m_code.m_count);
+                    continue;
                 end;
-                if token <> 'WAI' then begin
-                    m_parser.get_pos(sr, sc);
-                    writeln ('ERROR: "WAI" expected, but got "', token,
-                        '" at line ', sr, ', column ', sc);
-                    exit;
-                end;
-                break;
-            end else begin
-                m_parser.unget_token;
-                if not eval_statement() then
-                    exit;   // the recursive instance will have raised an error
             end;
+            // otherwise just parse the statement
+            m_parser.unget_token;
+            if not eval_statement() then
+                exit;   // the recursive instance will have raised an error
         end;
-        // optimize the code we've read so far
-        optimize(i);
-        // do we still have an "else" or "elseif" to parse?
-        if token = 'WAI' then begin
-            // update jump offset; add 1 to account for the jump instruction
-            // we're about to add
-            i^.arg := m_code.m_count - ofs + 1;
-            // finish the success block with an unconditional jump to after the
-            // else block; save off the instruction information; jump offset
-            // will be updated later on
-            i := m_code.append(OP_JMP, ARG_NULL);
-            ofs := int(m_code.m_count);
-            // evaluate statements until we hit an OIC
-            while m_parser.get_token(token, toktype) and (length(token) > 0) do
-                begin
-                // also check the token type to make sure we're not trying to
-                // read a string constant as a keyword
-                if token = 'OIC' then
-                    break
-                else begin
-                    m_parser.unget_token;
-                    if not eval_statement() then
-                        exit;   // the recursive instance will have raised an error
-                end;
-            end;
-            // optimize the code we've read so far
-            optimize(i);
+        if flowstate <> FS_LINEAR then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
         end;
-        // update jump offset
-        i^.arg := m_code.m_count - ofs;
     end else if token = 'LOL' then begin
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
