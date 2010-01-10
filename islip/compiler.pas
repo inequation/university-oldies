@@ -91,6 +91,8 @@ type
             function eval_statement : boolean;
             // evaluates the upcoming expression
             function eval_expr : boolean;
+            // parses a number or boolean literal
+            function literal(token : string) : boolean;
 
             // optimizes some instruction combinations
             procedure optimize(start : pislip_cmp_inst);
@@ -112,7 +114,8 @@ type
         FS_LINEAR,      // we're reading a normal, linear code block
         FS_IF,          // we're reading an "if" block
         FS_ELSEIF,      // we're reading an "else if" block
-        FS_ELSE         // we're reading an "else" block
+        FS_ELSE,        // we're reading an "else" block
+        FS_SWITCH       // we're reading a switch block
     );
 
 // ====================================================
@@ -134,6 +137,85 @@ begin
     m_code.destroy;
 end;
 
+function islip_compiler.literal(token : string) : boolean;
+var
+    floatmath   : boolean;
+    sr, sc      : size_t;
+    f           : float;
+    i           : int;
+    pv          : pislip_var;
+begin
+    literal := false;
+    // we can detect number literals by the first character
+    if not (token[1] in ['0'..'9']) or (token[1] = '-') then begin
+        // it can only be either a boolean literal or a syntax error now
+        if token = 'WIN' then begin
+{$IFDEF DEBUG}
+            writeln('DEBUG: boolean literal');
+{$ENDIF}
+            new(pv);
+            pv^ := islip_var.create(true);
+            m_code.append(OP_PUSH, m_vars.append(pv, token));
+            literal := true;
+        end else if token = 'FAIL' then begin
+{$IFDEF DEBUG}
+            writeln('DEBUG: boolean literal');
+{$ENDIF}
+            new(pv);
+            pv^ := islip_var.create(false);
+            m_code.append(OP_PUSH, m_vars.append(pv, token));
+            literal := true;
+        end;
+        exit;
+    end;
+{$IFDEF DEBUG}
+    writeln('DEBUG: number literal');
+{$ENDIF}
+    floatmath := false;
+    // don't switch to floating point math unless we find a radix
+    for i := 2 to length(token) do begin
+        if token[i] = '.' then begin
+            if floatmath then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Multiple radix characters in number literal at',
+                    ' line ', sr, ', column ', sc);
+                exit;
+            end;
+            floatmath := true;
+        end else if not (token[i] in ['0'..'9']) then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Invalid number literal at line ', sr,
+                ', column ', sc);
+            exit;
+        end;
+    end;
+    new(pv);
+    if floatmath then begin
+        if not atof(token, @f) then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Invalid number literal at line ', sr,
+                ', column ', sc);
+            exit;
+        end;
+        pv^ := islip_var.create(f);
+    end else begin
+        try
+            i := StrToInt(token);
+        except
+            on E : Exception do begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid number literal at line ', sr,
+                    ', column ', sc);
+                exit;
+            end;
+        end;
+        pv^ := islip_var.create(i);
+    end;    
+    // generate the instructions
+    m_code.append(OP_PUSH, m_vars.append(pv, token));
+    literal := true;
+end;
+
 // ====================================================
 // recursive expression evaluator
 // ====================================================
@@ -144,13 +226,13 @@ var
     toktype     : islip_parser_token_type;
     sr, sc, op  : size_t;
     v           : pislip_var;
-    f           : float;
+    mo          : boolean;
     i           : int;
-    floatmath   : boolean;
 begin
     eval_expr := false;  // i.e. expression is invalid
 
-    if not (m_parser.get_token(token, toktype) and (length(token) > 0)) then begin
+    if not (m_parser.get_token(token, toktype) and (length(token) > 0)) then
+        begin
         writeln('ERROR: Unexpected end of file');
         exit;
     end;
@@ -346,8 +428,8 @@ begin
 {$IFDEF DEBUG}
         writeln('DEBUG: eval_expr: string concatenation');
 {$ENDIF}
-        // reuse the variable; here it means "we have more than 1 operand"
-        floatmath := false;
+        // do we have more than 1 operand?
+        mo := false;
         while true do begin
             if not m_parser.get_token(token, toktype) then begin
                 writeln('ERROR: Unexpected end of file');
@@ -361,10 +443,10 @@ begin
             if not eval_expr() then
                 exit;
             // only append the instruction if have anything to concat
-            if floatmath then
+            if mo then
                 m_code.append(OP_CONCAT, ARG_NULL)
             else
-                floatmath := true;
+                mo := true;
         end;
     // string constant
     end else if toktype = TT_STRING then begin
@@ -376,93 +458,28 @@ begin
         v^ := islip_var.create(token);
         // generate the instructions
         m_code.append(OP_PUSH, m_vars.append(v, token));
-    // either a variable identifier, or a numerical or boolean constant
-    end else begin
-        // we can detect number literals by the first character
-        if (token[1] in ['0'..'9']) or (token[1] = '-') then begin
-{$IFDEF DEBUG}
-            writeln('DEBUG: eval_expr: numerical constant');
-{$ENDIF}        
-            floatmath := false;
-            // don't switch to floating point math unless we find a radix
-            for i := 2 to length(token) do begin
-                if token[i] = '.' then begin
-                    if floatmath then begin
-                        m_parser.get_pos(sr, sc);
-                        writeln('ERROR: Multiple radix characters in ',
-                            'numerical constant at line ', sr,
-                            ', column ', sc);
-                        exit;
-                    end;
-                    floatmath := true;
-                end else if not (token[i] in ['0'..'9']) then begin
-                    m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Invalid numerical constant at line ',
-                        sr, ', column ', sc);
-                    exit;
-                end;
-            end;
-            new(v);
-            if floatmath then begin
-                if not atof(token, @f) then begin
-                    m_parser.get_pos(sr, sc);
-                    writeln('ERROR: Invalid numerical constant at line ',
-                        sr, ', column ', sc);
-                    exit;
-                end;
-                v^ := islip_var.create(f);
-            end else begin
-                try
-                    i := StrToInt(token);
-                except
-                    on E : Exception do begin
-                        m_parser.get_pos(sr, sc);
-                        writeln('ERROR: Invalid numerical constant at line ',
-                            sr, ', column ', sc);
-                        exit;
-                    end;
-                end;
-                v^ := islip_var.create(i);
-            end;
-            // generate the instructions
-            m_code.append(OP_PUSH, m_vars.append(v, token));
-        // boolean constants
-        end else if token = 'WIN' then begin
-{$IFDEF DEBUG}
-            writeln('DEBUG: eval_expr: boolean constant');
-{$ENDIF}
-            new(v);
-            v^ := islip_var.create(true);
-            m_code.append(OP_PUSH, m_vars.append(v, token))
-        end else if token = 'FAIL' then begin
-{$IFDEF DEBUG}
-            writeln('DEBUG: eval_expr: boolean constant');
-{$ENDIF}
-            new(v);
-            v^ := islip_var.create(false);
-            m_code.append(OP_PUSH, m_vars.append(v, token))
-        end else begin
-            // check for illegal characters
-            if not IsValidIdent(token) then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Invalid characters in identifier at line ',
-                    sr, ', column ', sc);
-                exit;
-            end;
-{$IFDEF DEBUG}
-            writeln('DEBUG: eval_expr: identifier');
-{$ENDIF}
-            // FIXME: search for functions, too
-            i := m_vars.get_var_index(token);
-            if i = 0 then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Unknown identifier "', token, '" at line ',
-                    sr, ', column ', sc);
-                exit;
-            end;
-            // generate the instruction
-            m_code.append(OP_PUSH, i);
+    // either a variable identifier, or a number or boolean literal
+    end else if not literal(token) then begin
+        // check for illegal characters
+        if not IsValidIdent(token) then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Invalid characters in identifier at line ',
+                sr, ', column ', sc);
+            exit;
         end;
+{$IFDEF DEBUG}
+        writeln('DEBUG: eval_expr: identifier');
+{$ENDIF}
+        // FIXME: search for functions, too
+        i := m_vars.get_var_index(token);
+        if i = 0 then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unknown identifier "', token, '" at line ',
+                sr, ', column ', sc);
+            exit;
+        end;
+        // generate the instruction
+        m_code.append(OP_PUSH, i);
     end;
     eval_expr := true;
 end;
@@ -650,6 +667,81 @@ begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
+    // switch
+    end else if token = 'WTF?' then begin
+        flowstate := FS_LINEAR;
+        while m_parser.get_token(token, toktype) do begin
+            // check for the end of the block
+            if token = 'OIC' then begin
+                // if we haven't entered a switch statement yet, i and ofs will
+                // be invalid
+                if flowstate <> FS_LINEAR then begin
+                    // optimize code and update jump offset
+                    optimize(i);
+                    i^.arg := int(m_code.m_count) - ofs;
+                end;
+                break; // end of block
+            end;
+            if flowstate in [FS_LINEAR, FS_SWITCH] then begin
+                if token = 'OMG' then begin
+                    // if we've come here from a switch block, finish it up
+                    if flowstate = FS_SWITCH then begin
+                        // optimize the code so far and update the jump offset
+                        // FIXME: add an unconditional jump at the end of every
+                        // switch block so that we don't evaluate every damn
+                        // single condition
+                        optimize(i);
+                        i^.arg := int(m_code.m_count) - ofs;
+                    end else
+                        // set new state
+                        flowstate := FS_SWITCH;
+                    // push IT onto the stack
+                    m_code.append(OP_PUSH, 1);
+                    // read literal
+                    if not m_parser.get_token(token, toktype) then begin
+                        writeln('ERROR: Unexpected end of file');
+                        exit;
+                    end;
+                    if toktype = TT_STRING then begin
+                        new(pv);
+                        pv^ := islip_var.create(token);
+                        m_code.append(OP_PUSH, m_vars.append(pv, token));
+                    end else if not literal(token) then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln ('ERROR: Literal expected, but got "', token,
+                            '" at line ', sr, ', column ', sc);
+                        exit;
+                    end;
+                    // condition check
+                    m_code.append(OP_EQ, ARG_NULL);
+                    // save off the instruction information; jump offset will
+                    // be updated later on
+                    i := m_code.append(OP_CNDJMP, ARG_NULL);
+                    ofs := int(m_code.m_count);
+                    continue;
+                end else if (flowstate = FS_SWITCH) and (token = 'OMGWTF') then begin
+                    // optimize the code so far and update the jump offset
+                    // the +1 accounts for the unconditional jump we're about
+                    // to add; it's there to skip the "else" block and we
+                    // absolutely need it because there's no condition that can
+                    // be checked
+                    optimize(i);
+                    i^.arg := int(m_code.m_count) - ofs + 1;
+                    // set next state
+                    flowstate := FS_ELSE;
+                    // save off the instruction information; jump offset will
+                    // be updated later on
+                    i := m_code.append(OP_JMP, ARG_NULL);
+                    ofs := int(m_code.m_count);
+                    continue;
+                end;
+            end;
+            // just parse the statement
+            m_parser.unget_token;
+            if not eval_statement() then
+                exit;   // the recursive instance will have raised an error
+        end;
+    // variable assignation
     end else if token = 'LOL' then begin
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
