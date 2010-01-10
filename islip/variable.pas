@@ -26,7 +26,10 @@ type
             constructor create(b : boolean); overload;
             {constructor create(id : string; arr_type : islip_var_type;
                 s : size_t); overload;}
-            destructor destroy; override;
+            destructor destroy;
+
+            // copies the variable from other
+            procedure copy(other : pislip_var);
 
             // prints the variable to stdout
             procedure echo;
@@ -67,45 +70,8 @@ end;
 
 // copy constructor
 constructor islip_var.create(var v : islip_var);
-var
-    pi1, pi2    : ^int;
-    pf1, pf2    : ^float;
-    ps1, ps2    : ^string;
-    pb1, pb2    : ^boolean;
 begin
-    m_type := v.m_type;
-    case v.m_type of
-        VT_UNTYPED:
-            m_valptr := nil;
-        VT_INT:
-            begin
-                pi1 := v.m_valptr;
-                new(pi2);
-                pi2^ := pi1^;
-                m_valptr := pi2;
-            end;
-        VT_FLOAT:
-            begin
-                pf1 := v.m_valptr;
-                new(pf2);
-                pf2^ := pf1^;
-                m_valptr := pf2;
-            end;
-        VT_STRING:
-            begin
-                ps1 := v.m_valptr;
-                new(ps2);
-                ps2^ := ps1^;
-                m_valptr := ps2;
-            end;
-        VT_BOOL:
-            begin
-                pb1 := v.m_valptr;
-                new(pb2);
-                pb2^ := pb1^;
-                m_valptr := pb2;
-            end;
-    end;
+    copy(@v);
 end;
 
 // integer constructor
@@ -220,6 +186,47 @@ begin
             end;}
     end;
     m_valptr := nil;
+end;
+
+procedure islip_var.copy(other : pislip_var);
+var
+    pi1, pi2    : ^int;
+    pf1, pf2    : ^float;
+    ps1, ps2    : ^string;
+    pb1, pb2    : ^boolean;
+begin
+    reset_value;
+    m_type := other^.m_type;
+    case m_type of
+        VT_INT:
+            begin
+                new(pi1);
+                pi2 := other^.m_valptr;
+                pi1^ := pi2^;
+                m_valptr := pi1;
+            end;
+        VT_FLOAT:
+            begin
+                new(pf1);
+                pf2 := other^.m_valptr;
+                pf1^ := pf2^;
+                m_valptr := pf1;
+            end;
+        VT_STRING:
+            begin
+                new(ps1);
+                ps2 := other^.m_valptr;
+                ps1^ := ps2^;
+                m_valptr := ps1;
+            end;
+        VT_BOOL:
+            begin
+                new(pb1);
+                pb2 := other^.m_valptr;
+                pb1^ := pb2^;
+                m_valptr := pb1;
+            end;
+    end;
 end;
 
 procedure islip_var.echo;

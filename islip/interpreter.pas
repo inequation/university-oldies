@@ -16,7 +16,7 @@ type
     islip_stack         = class
         public
             constructor create(size : size_t);
-            //destructor destroy; override;
+            destructor destroy; override;
 
             procedure push(pv : pislip_var);
             procedure pop(pv : pislip_var);
@@ -30,7 +30,7 @@ type
         public
             constructor create(stack_size : size_t; var c : islip_bytecode;
                 var d : islip_data);
-            //destructor destroy; override;
+            destructor destroy; override;
 
             procedure run;
         private
@@ -53,6 +53,11 @@ begin
     m_data := @d;
 end;
 
+destructor islip_interpreter.destroy;
+begin
+    m_stack.destroy;
+end;
+
 procedure islip_interpreter.run;
 var
     i   : int;
@@ -61,6 +66,7 @@ var
     s   : string;
 begin
     i := 1;
+    v := islip_var.create;
     while i < length(m_code^) do begin
         case m_code^[i].inst of
             OP_STOP:
@@ -90,6 +96,7 @@ begin
                     if not pv^.math(@v, m_code^[i].inst) then begin
                         writeln('RUNTIME ERROR: Invalid operands to ',
                             'arithmetic operator at 0x', IntToHex(i, 8));
+                        v.destroy;
                         exit;
                     end;
                 end;
@@ -111,6 +118,7 @@ begin
                     if not pv^.logic(@v, m_code^[i].inst) then begin
                         writeln('RUNTIME ERROR: Invalid operands to ',
                             'logical operator at 0x', IntToHex(i, 8));
+                        v.destroy;
                         exit;
                     end;
                 end;
@@ -151,11 +159,13 @@ begin
                 writeln('ERROR: Invalid instruction 0x',
                     IntToHex(m_code^[i].inst, 2), ', possibly corrupt bytecode ',
                     'or unimplemented instruction');
+                v.destroy;
                 exit;
             end;
         end;
         inc(i);
     end;
+    v.destroy;
 end;
 
 // ====================================================
@@ -163,9 +173,21 @@ end;
 // ====================================================
 
 constructor islip_stack.create(size : size_t);
+var
+    i   : size_t;
 begin
     setlength(m_stack, size);
+    for i := 1 to size do
+        m_stack[i] := islip_var.create;
     m_top := 0;
+end;
+
+destructor islip_stack.destroy;
+var
+    i   : size_t;
+begin
+    for i := 1 to length(m_stack) do
+        m_stack[i].destroy;
 end;
 
 procedure islip_stack.push(pv : pislip_var);
@@ -177,7 +199,7 @@ begin
     end;
     inc(m_top);
     if pv <> nil then
-        m_stack[m_top] := pv^
+        m_stack[m_top].copy(pv)
     else
         m_stack[m_top] := islip_var.create;
 end;
@@ -188,8 +210,9 @@ begin
         writeln('RUNTIME ERROR: Stack underflow');
         exit;
     end;
-    if pv <> nil then
-        pv^ := m_stack[m_top];
+    if pv <> nil then begin
+        pv^.copy(@m_stack[m_top]);
+    end;
     dec(m_top);
 end;
 

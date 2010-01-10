@@ -190,6 +190,8 @@ begin
                         // keep track of where we started the token
                         m_reader.get_pos(m_row, m_col);
                     end else if c in [chr(10), chr(13), ','] then begin
+                        if c = ',' then
+                            c := chr(10);
                         m_token := c;
                         s := m_token;
                         m_prevtoken := m_token;
@@ -221,6 +223,8 @@ begin
                         s := m_token;
                         m_prevtoken := m_token;
                         m_prevtype := t;
+                        if c = ',' then
+                            c := chr(10);
                         m_token := c;
                         exit;
                     end else if ord(c) > 32 then
