@@ -100,13 +100,13 @@ const
     OP_CONCAT       =   $10;
 
     // JMP: unconditional jump
-    // args: instruction offset to apply
+    // args: address of the instruction to jump to
     // result: corresponding pointer arithmetic on the interpreter's instruction
     // pointer
     OP_JMP          =   $11;
 
     // CNDJMP: conditional jump (if the implicit "IT" variable is *false*)
-    // args: instruction offset to apply
+    // args: address of the instruction to jump to
     // result: corresponding pointer arithmetic on the interpreter's instruction
     // pointer
     OP_CNDJMP       =   $12;
@@ -137,6 +137,12 @@ const
     // result: n/a
     OP_CAST         =   $17;
 
+    // INCR: increments (arg = 1) or decrements (arg = 0) the value of the top
+    // of the stack
+    // args: 0 for decrementation, 1 for incrementation
+    // result: n/a
+    OP_INCR         =   $18;
+
     // ====================================================
     // special arguments
     // ====================================================
@@ -150,7 +156,7 @@ type
     // single instruction with the argument
     islip_inst      = record
         inst        : byte;
-        arg         : int;
+        arg         : size_t;
     end;
     
     islip_bytecode  = array of islip_inst;

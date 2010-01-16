@@ -60,14 +60,14 @@ end;
 
 procedure islip_interpreter.run;
 var
-    i   : int;
+    i   : size_t;
     pv  : pislip_var;
     v   : islip_var;
     s   : string;
 begin
     i := 1;
     v := islip_var.create;
-    while i < length(m_code^) do begin
+    while i < size_t(length(m_code^)) do begin
         case m_code^[i].inst of
             OP_STOP:
                 break;
@@ -144,7 +144,10 @@ begin
             OP_CAST:
                 (m_stack.peek)^.cast(islip_type(m_code^[i].arg));
             OP_JMP:
-                i := i + m_code^[i].arg;
+                begin
+                    i := m_code^[i].arg;
+                    continue;
+                end;
             OP_CNDJMP:
                 begin
                     m_stack.pop(@v);
@@ -152,8 +155,10 @@ begin
                     // FALSE! this is because the success block follows
                     // immediately, while the "else" block (or further code, if
                     // there is no "else") appears after the success block
-                    if not v.get_bool then
-                        i := i + m_code^[i].arg;
+                    if not v.get_bool then begin
+                        i := m_code^[i].arg;
+                        continue;
+                    end;
                 end;
             else begin
                 writeln('ERROR: Invalid instruction 0x',

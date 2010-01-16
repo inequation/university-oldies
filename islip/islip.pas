@@ -169,9 +169,9 @@ begin
             OP_CONCAT:
                 writeln('  concat');
             OP_JMP:
-                writeln('  jmp    ', g_bytecode[i].arg);
+                writeln('  jmp    0x', IntToHex(g_bytecode[i].arg, 8));
             OP_CNDJMP:
-                writeln('  cndjmp ', g_bytecode[i].arg);
+                writeln('  cndjmp 0x', IntToHex(g_bytecode[i].arg, 8));
             OP_PRINT:
                 writeln('  print');
             OP_READ:

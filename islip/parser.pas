@@ -64,8 +64,14 @@ type
             m_row       : size_t;
             m_col       : size_t;
             m_token     : string;
-            m_prevtoken : string;
-            m_prevtype  : islip_parser_token_type;
+            m_ptoken    : string;
+            m_ptype     : islip_parser_token_type;
+            m_p2token   : string;
+            m_p2type    : islip_parser_token_type;
+            m_p3token   : string;
+            m_p3type    : islip_parser_token_type;
+            m_p4token   : string;
+            m_p4type    : islip_parser_token_type;
 
             function comment : boolean;
     end;
@@ -114,8 +120,14 @@ constructor islip_parser.create(var input : cfile);
 begin
     m_reader := islip_reader.create(input);
     m_token := '';
-    m_prevtoken := '';
-    m_prevtype := TT_WS;
+    m_ptoken := '';
+    m_ptype := TT_WS;
+    m_p2token := '';
+    m_p2type := TT_WS;
+    m_p3token := '';
+    m_p3type := TT_WS;
+    m_p4token := '';
+    m_p4type := TT_WS;
 end;
 
 function islip_parser.comment : boolean;
@@ -171,8 +183,11 @@ begin
     // if we still have something to throw, do it
     if length(m_token) > 0 then begin
         s := m_token;
-        t := m_prevtype;
-        m_prevtoken := m_token;
+        t := m_ptype;
+        m_p4token := m_p3token;
+        m_p3token := m_p2token;
+        m_p2token := m_ptoken;
+        m_ptoken := m_token;
         m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the
         m_token := '';           // string to be zeroed in FPC
         exit;
@@ -194,8 +209,14 @@ begin
                             c := chr(10);
                         m_token := c;
                         s := m_token;
-                        m_prevtoken := m_token;
-                        m_prevtype := t;
+                        m_p4token := m_p3token;
+                        m_p3token := m_p2token;
+                        m_p2token := m_ptoken;
+                        m_p4type := m_p3type;
+                        m_p3type := m_p2type;
+                        m_p2type := m_ptype;
+                        m_ptoken := m_token;
+                        m_ptype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -221,8 +242,14 @@ begin
                         // throw what we've got so far and keep that newline in
                         // mind
                         s := m_token;
-                        m_prevtoken := m_token;
-                        m_prevtype := t;
+                        m_p4token := m_p3token;
+                        m_p3token := m_p2token;
+                        m_p2token := m_ptoken;
+                        m_p4type := m_p3type;
+                        m_p3type := m_p2type;
+                        m_p2type := m_ptype;
+                        m_ptoken := m_token;
+                        m_ptype := t;
                         if c = ',' then
                             c := chr(10);
                         m_token := c;
@@ -240,8 +267,14 @@ begin
                             exit;
                         end;
                         s := m_token;
-                        m_prevtoken := m_token;
-                        m_prevtype := t;
+                        m_p4token := m_p3token;
+                        m_p3token := m_p2token;
+                        m_p2token := m_ptoken;
+                        m_p4type := m_p3type;
+                        m_p3type := m_p2type;
+                        m_p2type := m_ptype;
+                        m_ptoken := m_token;
+                        m_ptype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -272,8 +305,14 @@ begin
                         m_token := m_token + c
                     else begin
                         s := m_token;
-                        m_prevtoken := m_token;
-                        m_prevtype := t;
+                        m_p4token := m_p3token;
+                        m_p3token := m_p2token;
+                        m_p2token := m_ptoken;
+                        m_p4type := m_p3type;
+                        m_p3type := m_p2type;
+                        m_p2type := m_ptype;
+                        m_ptoken := m_token;
+                        m_ptype := t;
                         m_token[1] := chr(0);    // HACK HACK HACK! somehow
                         m_token := '';           // necessary for the string to
                         exit;                    // be zeroed in FPC
@@ -300,8 +339,14 @@ begin
     end else begin
         // return the last token on eof
         s := m_token;
-        m_prevtoken := m_token;
-        m_prevtype := t;
+        m_p4token := m_p3token;
+        m_p3token := m_p2token;
+        m_p2token := m_ptoken;
+        m_p4type := m_p3type;
+        m_p3type := m_p2type;
+        m_p2type := m_ptype;
+        m_ptoken := m_token;
+        m_ptype := t;
         m_token[1] := chr(0);    // HACK HACK HACK! somehow
         m_token := '';
     end;
@@ -309,10 +354,14 @@ end;
 
 procedure islip_parser.unget_token;
 begin
-    if length(m_prevtoken) > 0 then
-        m_token := m_prevtoken
-    else
-        writeln('WARNING: Attempted to unget twice in a row');
+    if length(m_ptoken) > 0 then begin
+        m_token := m_ptoken;
+        m_ptoken := m_p2token;
+        m_p2token := m_p3token;
+        m_p3token := m_p4token;
+        m_p4token := '';
+    end else
+        writeln('WARNING: Attempted to unget five times in a row');
 end;
 
 procedure islip_parser.get_pos(var row : size_t; var col : size_t);

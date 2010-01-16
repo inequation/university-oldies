@@ -1,11 +1,12 @@
 // islip - IneQuation's Simple LOLCODE Interpreter in Pascal
 // Written by Leszek "IneQuation" Godlewski <leszgod081@student.polsl.pl>
 // Language parser and bytecode compiler unit
+// Sorry for the spaghetti code but can't be arsed to improve it!
 
 unit compiler;
 
 // uncomment the following to enable debug printouts
-//{$DEFINE DEBUG}
+{$DEFINE DEBUG}
 
 {$IFDEF fpc}
     {$MODE objfpc}
@@ -115,8 +116,32 @@ type
         FS_IF,          // we're reading an "if" block
         FS_ELSEIF,      // we're reading an "else if" block
         FS_ELSE,        // we're reading an "else" block
-        FS_SWITCH       // we're reading a switch block
+        FS_SWITCH,      // we're reading a switch block
+        FS_LOOP         // we're reading a loop block
     );
+
+    // list element for ipcont
+    pislip_cmp_ip   = ^islip_cmp_ip;
+    islip_cmp_ip    = record
+        i           : pislip_cmp_inst;
+        next        : pislip_cmp_ip;
+    end;
+
+    // helper class to manage a linked list of instruction pointers to simplify
+    // jumping out of success blocks to after the non-linear code block
+    islip_cmp_ipcont = class
+        public
+            constructor create;
+            
+            // fills the arguments of all elements with ofs
+            procedure fill(ofs : int);
+
+            // adds a pointer to an instruction to list
+            procedure add(i : pislip_cmp_inst);
+        private
+            m_head  : pislip_cmp_ip;
+            m_tail  : pislip_cmp_ip;
+    end;
 
 // ====================================================
 // compiler implementation
@@ -492,12 +517,12 @@ function islip_compiler.eval_statement : boolean;
 var
     token, id   : string;
     toktype     : islip_parser_token_type;
-    sr, sc      : size_t;
+    sr, sc, tmp : size_t;
     v           : pislip_cmp_var;
     pv          : pislip_var;
     i           : pislip_cmp_inst;
-    ofs         : int;
     flowstate   : islip_flowstate;
+    ipcont      : islip_cmp_ipcont;
 begin
     eval_statement := false;
 
@@ -512,7 +537,7 @@ begin
         eval_statement := true;
         exit;
     end;
-    
+
     v := nil;
 {$IFDEF DEBUG}
     writeln('DEBUG: eval_statement: Token: "', token, '", type: ', int(toktype));
@@ -587,12 +612,13 @@ begin
                 'line ', sr, ', column ', sc);
             exit;
         end;
+        // create an instruction container
+        ipcont := islip_cmp_ipcont.create;
         // push IT onto the stack
         m_code.append(OP_PUSH, 1);
         // save off the instruction information; jump offset will be updated
         // later on
         i := m_code.append(OP_CNDJMP, ARG_NULL);
-        ofs := int(m_code.m_count);
         // evaluate statements until we hit another flow control statement
         flowstate := FS_IF;
         while m_parser.get_token(token, toktype) do begin
@@ -603,17 +629,17 @@ begin
             if flowstate = FS_LINEAR then begin
                 // optimize code and update jump offset
                 optimize(i);
-                i^.arg := int(m_code.m_count) - ofs;
+                i^.arg := m_code.m_count + 2;
                 break;  // end of conditional block altogether
             end else if flowstate in [FS_IF, FS_ELSEIF] then begin
                 // elseif
                 if token = 'MEBBE' then begin
-                    // optimize the code so far and update the jump offset
-                    // FIXME: add an unconditional jump at the end of every
-                    // success block so that we don't evaluate every damn
-                    // single condition
+                    // optimize the code so far and update the jump offset; the
+                    // +2 accounts for the jump we're about to add
                     optimize(i);
-                    i^.arg := int(m_code.m_count) - ofs;
+                    i^.arg := m_code.m_count + 2;
+                    // add the jump to after the block on success
+                    ipcont.add(m_code.append(OP_JMP, ARG_NULL));
                     // set next state
                     flowstate := FS_ELSEIF;
                     // evaluate the condition
@@ -626,7 +652,6 @@ begin
                     // save off the instruction information; jump offset will
                     // be updated later on
                     i := m_code.append(OP_CNDJMP, ARG_NULL);
-                    ofs := int(m_code.m_count);
                     continue;
                 // else
                 end else if (toktype = TT_EXPR) and (token = 'NO') then
@@ -642,19 +667,15 @@ begin
                             '" at line ', sr, ', column ', sc);
                         exit;
                     end;
-                    // optimize the code so far and update the jump offset
-                    // the +1 accounts for the unconditional jump we're about
-                    // to add; it's there to skip the "else" block and we
-                    // absolutely need it because there's no condition that can
-                    // be checked
+                    // optimize the code so far and update the jump offset; the
+                    // +2 accounts for the jump we're about to add; it's there
+                    // to skip the "else" block and we absolutely need it
+                    // because there's no condition that can be checked
                     optimize(i);
-                    i^.arg := int(m_code.m_count) - ofs + 1;
+                    i^.arg := m_code.m_count + 2;
                     // set next state
                     flowstate := FS_ELSE;
-                    // save off the instruction information; jump offset will
-                    // be updated later on
-                    i := m_code.append(OP_JMP, ARG_NULL);
-                    ofs := int(m_code.m_count);
+                    ipcont.add(m_code.append(OP_JMP, ARG_NULL));
                     continue;
                 end;
             end;
@@ -667,31 +688,40 @@ begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
+        // fill the arguments of the saved instructions and clean up the mess
+        ipcont.fill(m_code.m_count + 1);
+        ipcont.destroy;
     // switch
     end else if token = 'WTF?' then begin
         flowstate := FS_LINEAR;
+        // create an instruction container
+        ipcont := islip_cmp_ipcont.create;
         while m_parser.get_token(token, toktype) do begin
             // check for the end of the block
             if token = 'OIC' then begin
-                // if we haven't entered a switch statement yet, i and ofs will
-                // be invalid
+                // if we haven't entered a switch statement yet, the pointer i
+                // will be invalid
                 if flowstate <> FS_LINEAR then begin
                     // optimize code and update jump offset
                     optimize(i);
-                    i^.arg := int(m_code.m_count) - ofs;
+                    if i^.arg = ARG_NULL then
+                        i^.arg := m_code.m_count + 1;
+                    flowstate := FS_LINEAR;
                 end;
                 break; // end of block
             end;
             if flowstate in [FS_LINEAR, FS_SWITCH] then begin
                 if token = 'OMG' then begin
-                    // if we've come here from a switch block, finish it up
+                    // if we've come here from a switch block, finish it up and
+                    // make a jump over the condition check; we only leave the
+                    // block on GTFO
                     if flowstate = FS_SWITCH then begin
                         // optimize the code so far and update the jump offset
-                        // FIXME: add an unconditional jump at the end of every
-                        // switch block so that we don't evaluate every damn
-                        // single condition
                         optimize(i);
-                        i^.arg := int(m_code.m_count) - ofs;
+                        // so that it points on OP_PUSH
+                        i^.arg := m_code.m_count + 2;
+                        // so that it points on after the check
+                        m_code.append(OP_JMP, m_code.m_count + 5);
                     end else
                         // set new state
                         flowstate := FS_SWITCH;
@@ -717,22 +747,24 @@ begin
                     // save off the instruction information; jump offset will
                     // be updated later on
                     i := m_code.append(OP_CNDJMP, ARG_NULL);
-                    ofs := int(m_code.m_count);
                     continue;
                 end else if (flowstate = FS_SWITCH) and (token = 'OMGWTF') then begin
                     // optimize the code so far and update the jump offset
-                    // the +1 accounts for the unconditional jump we're about
+                    // the +2 accounts for the unconditional jump we're about
                     // to add; it's there to skip the "else" block and we
                     // absolutely need it because there's no condition that can
                     // be checked
                     optimize(i);
-                    i^.arg := int(m_code.m_count) - ofs + 1;
+                    i^.arg := m_code.m_count + 2;
                     // set next state
                     flowstate := FS_ELSE;
                     // save off the instruction information; jump offset will
                     // be updated later on
-                    i := m_code.append(OP_JMP, ARG_NULL);
-                    ofs := int(m_code.m_count);
+                    ipcont.add(m_code.append(OP_JMP, ARG_NULL));
+                    continue;
+                end else if (flowstate = FS_SWITCH) and (token = 'GTFO') then begin
+                    // just add a jump out of the block
+                    ipcont.add(m_code.append(OP_JMP, ARG_NULL));
                     continue;
                 end;
             end;
@@ -741,6 +773,190 @@ begin
             if not eval_statement() then
                 exit;   // the recursive instance will have raised an error
         end;
+        if flowstate <> FS_LINEAR then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        // fill the arguments of the saved instructions and clean up the mess
+        ipcont.fill(m_code.m_count + 1);
+        ipcont.destroy;
+    // loop
+    end else if token = 'IM' then begin
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'IN' then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: "IN" expected, but got "', token, '" at ',
+                 'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'YR' then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: "YR" expected, but got "', token, '" at ',
+                 'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // read loop label
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        id := token;
+        // mark the beginning of the loop
+        sr := m_code.m_count + 1;
+        // read loop operation
+        flowstate := FS_LOOP;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if (token = 'UPPIN') or (token = 'NERFIN') then begin
+            // reuse the variable to mark the operation
+            if token[1] = 'U' then
+                sc := 1
+            else
+                sc := 2;
+            // fetch next token
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if token <> 'YR' then begin
+                m_parser.get_pos(sr, sc);
+                writeln ('ERROR: "YR" expected, but got "', token, '" at ',
+                    'line ', sr, ', column ', sc);
+                exit;
+            end;
+            // fetch next token
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            // check for illegal characters
+            if not IsValidIdent(token) then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Invalid characters in identifier at line ',
+                    sr, ', column ', sc);
+                exit;
+            end;
+            // FIXME: search for functions, too
+            tmp := m_vars.get_var_index(token);
+            if tmp = 0 then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Unknown identifier "', token, '" at line ',
+                    sr, ', column ', sc);
+                exit;
+            end;
+            // check if we have a loop condition
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if (token = 'TIL') or (token = 'WILE') then begin
+                // evaluate the expression
+                if not eval_expr() then begin
+                    m_parser.get_pos(sr, sc);
+                    writeln('ERROR: Unable to evaluate expression at ',
+                        'line ', sr, ', column ', sc);
+                    exit;
+                end;
+                // TIL will keep the loop running if the condition is false,
+                // while WILE will do so when it's true, so add a negation for
+                // TIL
+                if token[1] = 'T' then
+                    m_code.append(OP_NEG, ARG_NULL);
+                // add a conditional jump out of the loop
+                ipcont.add(m_code.append(OP_CNDJMP, ARG_NULL));
+            end else begin
+                m_parser.get_pos(sr, sc);
+                writeln ('ERROR: "TIL" or "WILE" expected, but got "', token,
+                    '" at line ', sr, ', column ', sc);
+                exit;
+            end;
+        end else begin
+            // else it's an infinite loop
+            sc := 0;
+            m_parser.unget_token;
+        end;
+        while m_parser.get_token(token, toktype) do begin
+            // look for the loop closing statement
+            // fetch next token
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if token = 'IM' then begin
+                // fetch next token
+                if not m_parser.get_token(token, toktype) then begin
+                    writeln('ERROR: Unexpected end of file');
+                    exit;
+                end;
+                if token = 'OUTTA' then begin
+                    // fetch next token
+                    if not m_parser.get_token(token, toktype) then begin
+                        writeln('ERROR: Unexpected end of file');
+                        exit;
+                    end;
+                    if token <> 'YR' then begin
+                        m_parser.get_pos(sr, sc);
+                        writeln ('ERROR: "YR" expected, but got "', token,
+                        '" at line ', sr, ', column ', sc);
+                        exit;
+                    end;
+                    // fetch next token
+                    if not m_parser.get_token(token, toktype) then begin
+                        writeln('ERROR: Unexpected end of file');
+                        exit;
+                    end;
+                    if token = id then begin
+                        // add incrementation/decrementation, if relevant
+                        if sc = 1 then begin
+                            m_code.append(OP_PUSH, tmp);
+                            m_code.append(OP_INCR, 1);
+                            m_code.append(OP_POP, tmp);
+                        end else if sc = 2 then begin
+                            m_code.append(OP_PUSH, tmp);
+                            m_code.append(OP_INCR, 0);
+                            m_code.append(OP_POP, tmp);
+                        end;
+                        // add a jump to the beginning of the loop
+                        m_code.append(OP_JMP, sr);
+                        flowstate := FS_LINEAR;
+                        break;
+                    end else begin
+                        // need to unget 3 tokens (loop label, YR and OUTTA)
+                        // IM will be taken care of later on
+                        m_parser.unget_token;
+                        m_parser.unget_token;
+                        m_parser.unget_token;
+                    end;
+                end;
+                    m_parser.unget_token;
+            end else if token = 'GTFO' then begin
+                // add a jump out of the loop
+                ipcont.add(m_code.append(OP_JMP, ARG_NULL));
+                continue;
+            end;
+            // just parse the statement
+            m_parser.unget_token;
+            if not eval_statement() then
+                exit;   // the recursive instance will have raised an error
+        end;
+        if flowstate <> FS_LINEAR then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        ipcont.fill(m_code.m_count + 1);
+        ipcont.destroy;
     // variable assignation
     end else if token = 'LOL' then begin
         // fetch next token
@@ -1159,7 +1375,6 @@ var
 begin
     inc(m_count);
     new(p);
-    //writeln('append ', i, ' ', arg, '! ', m_count, ' ', size_t(m_head), ' ', size_t(m_tail), ' ', size_t(p));
     p^.i := i;
     p^.arg := arg;
     p^.next := nil;
@@ -1177,7 +1392,6 @@ procedure islip_cmp_code_cont.chop_tail;
 var
     p   : pislip_cmp_inst;
 begin
-    //writeln('chop! ', m_count, ' ', size_t(m_head), ' ', size_t(m_tail));
     if m_tail = nil then
         exit;
     dec(m_count);
@@ -1191,6 +1405,45 @@ begin
     while p^.next <> m_tail do
         p := p^.next;
     dispose(p^.next);
+    m_tail := p;
+end;
+
+// ====================================================
+// jump instruction container implementation
+// ====================================================
+
+constructor islip_cmp_ipcont.create;
+begin
+    m_head := nil;
+    m_tail := nil;
+end;
+
+procedure islip_cmp_ipcont.fill(ofs : int);
+var
+    p1, p2  : pislip_cmp_ip;
+begin
+    p1 := m_head;
+    while p1 <> nil do begin
+        p1^.i^.arg := ofs;
+        p2 := p1;
+        p1 := p1^.next;
+        dispose(p2);
+    end;
+    m_head := nil;
+    m_tail := nil;
+end;
+
+procedure islip_cmp_ipcont.add(i : pislip_cmp_inst);
+var
+    p   : pislip_cmp_ip;
+begin
+    new(p);
+    p^.i := i;
+    p^.next := nil;
+    if m_tail <> nil then
+        m_tail^.next := p
+    else
+        m_head := p;
     m_tail := p;
 end;
 
