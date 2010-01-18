@@ -31,8 +31,8 @@ type
             // copies the variable from other
             procedure copy(other : pislip_var);
 
-            // prints the variable to stdout
-            procedure echo;
+            // prints the variable to stdout or stderr
+            procedure echo(to_stderr : boolean);
             // returns variable type
             function get_type : islip_type;
             // does a cast to target type
@@ -49,12 +49,11 @@ type
             function logic(other : pislip_var; op : byte) : boolean;
             // string concatenation; results in a cast to string
             procedure concat(other : pislip_var);
+            // frees the value pointed to by m_valptr
+            procedure reset_value;
         private
             m_type      : islip_type;
             m_valptr    : pointer;
-
-            // frees the value pointed to by m_valptr
-            procedure reset_value;
     end;
 
 implementation
@@ -229,7 +228,7 @@ begin
     end;
 end;
 
-procedure islip_var.echo;
+procedure islip_var.echo(to_stderr : boolean);
 var
     pi  : ^int;
     pf  : ^float;
@@ -240,25 +239,41 @@ begin
         VT_INT:
             begin
                 pi := m_valptr;
-                write(pi^);
+                if to_stderr then
+                    write(stderr, pi^)
+                else
+                    write(pi^);
             end;
         VT_FLOAT:
             begin
                 pf := m_valptr;
-                write(pf^:0:2);
+                if to_stderr then
+                    write(stderr, pf^:0:2)
+                else
+                    write(pf^:0:2);
             end;
         VT_STRING:
             begin
                 ps := m_valptr;
-                write(ps^);
+                if to_stderr then
+                    write(stderr, ps^)
+                else
+                    write(ps^);
             end;
         VT_BOOL:
             begin
                 pb := m_valptr;
-                if pb^ then
-                    write('WIN')
-                else
-                    write('FAIL');
+                if to_stderr then begin
+                    if pb^ then
+                        write(stderr, 'WIN')
+                    else
+                        write(stderr, 'FAIL');
+                end else begin
+                    if pb^ then
+                        write('WIN')
+                    else
+                        write('FAIL');
+                end;
             end;
     end;
 end;
@@ -353,7 +368,7 @@ begin
                     VT_STRING:
                         begin
                             new(ps);
-                            ps^ := FloatToStr(pi^);
+                            ps^ := FloatToStr(pf^);
                             m_valptr := ps;
                         end;
                 end;

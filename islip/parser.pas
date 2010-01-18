@@ -138,12 +138,11 @@ begin
     if m_token = 'BTW' then begin
         // skip characters until we read a newline and
         // start a new token
-        while m_reader.get_char(c) do begin
+        while m_reader.get_char(c) do
             if c in [chr(10), chr(13)] then begin
                 m_token := '';
                 break;
             end;
-        end;
     end else if m_token = 'OBTW' then begin
         // skip characters until we read a "TLDR"
         while m_reader.get_char(c) do begin

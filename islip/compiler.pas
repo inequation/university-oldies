@@ -74,6 +74,30 @@ type
             procedure chop_tail;
     end;
 
+    // list element for ipcont
+    pislip_cmp_ip   = ^islip_cmp_ip;
+    islip_cmp_ip    = record
+        i           : pislip_cmp_inst;
+        next        : pislip_cmp_ip;
+    end;
+
+    pislip_cmp_ipcont   = ^islip_cmp_ipcont;
+    // helper class to manage a linked list of instruction pointers to simplify
+    // jumping out of success blocks to after the non-linear code block
+    islip_cmp_ipcont = class
+        public
+            constructor create;
+
+            // fills the arguments of all elements with ofs
+            procedure fill(ofs : int);
+
+            // adds a pointer to an instruction to list
+            procedure add(i : pislip_cmp_inst);
+        private
+            m_head  : pislip_cmp_ip;
+            m_tail  : pislip_cmp_ip;
+    end;
+
     islip_compiler          = class
         public
             constructor create(var input : cfile);
@@ -89,7 +113,7 @@ type
             m_done      : boolean;
 
             // evaluates the upcoming statement
-            function eval_statement : boolean;
+            function eval_statement(gtfo : pislip_cmp_ipcont) : boolean;
             // evaluates the upcoming expression
             function eval_expr : boolean;
             // parses a number or boolean literal
@@ -120,29 +144,6 @@ type
         FS_LOOP         // we're reading a loop block
     );
 
-    // list element for ipcont
-    pislip_cmp_ip   = ^islip_cmp_ip;
-    islip_cmp_ip    = record
-        i           : pislip_cmp_inst;
-        next        : pislip_cmp_ip;
-    end;
-
-    // helper class to manage a linked list of instruction pointers to simplify
-    // jumping out of success blocks to after the non-linear code block
-    islip_cmp_ipcont = class
-        public
-            constructor create;
-            
-            // fills the arguments of all elements with ofs
-            procedure fill(ofs : int);
-
-            // adds a pointer to an instruction to list
-            procedure add(i : pislip_cmp_inst);
-        private
-            m_head  : pislip_cmp_ip;
-            m_tail  : pislip_cmp_ip;
-    end;
-
 // ====================================================
 // compiler implementation
 // ====================================================
@@ -172,7 +173,7 @@ var
 begin
     literal := false;
     // we can detect number literals by the first character
-    if not (token[1] in ['0'..'9']) or (token[1] = '-') then begin
+    if not ((token[1] in ['0'..'9']) or (token[1] = '-')) then begin
         // it can only be either a boolean literal or a syntax error now
         if token = 'WIN' then begin
 {$IFDEF DEBUG}
@@ -180,7 +181,7 @@ begin
 {$ENDIF}
             new(pv);
             pv^ := islip_var.create(true);
-            m_code.append(OP_PUSH, m_vars.append(pv, token));
+            m_code.append(OP_PUSH, m_vars.append(pv, ''));
             literal := true;
         end else if token = 'FAIL' then begin
 {$IFDEF DEBUG}
@@ -188,7 +189,7 @@ begin
 {$ENDIF}
             new(pv);
             pv^ := islip_var.create(false);
-            m_code.append(OP_PUSH, m_vars.append(pv, token));
+            m_code.append(OP_PUSH, m_vars.append(pv, ''));
             literal := true;
         end;
         exit;
@@ -237,7 +238,7 @@ begin
         pv^ := islip_var.create(i);
     end;    
     // generate the instructions
-    m_code.append(OP_PUSH, m_vars.append(pv, token));
+    m_code.append(OP_PUSH, m_vars.append(pv, ''));
     literal := true;
 end;
 
@@ -482,7 +483,7 @@ begin
         new(v);
         v^ := islip_var.create(token);
         // generate the instructions
-        m_code.append(OP_PUSH, m_vars.append(v, token));
+        m_code.append(OP_PUSH, m_vars.append(v, ''));
     // either a variable identifier, or a number or boolean literal
     end else if not literal(token) then begin
         // check for illegal characters
@@ -513,7 +514,7 @@ end;
 // recursive statement evaluator
 // ====================================================
 
-function islip_compiler.eval_statement : boolean;
+function islip_compiler.eval_statement(gtfo : pislip_cmp_ipcont) : boolean;
 var
     token, id   : string;
     toktype     : islip_parser_token_type;
@@ -581,7 +582,7 @@ begin
         end;
         if token <> 'RLY?' then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: "RLY?" expected, but got "', token, '" at ',
+            writeln('ERROR: "RLY?" expected, but got "', token, '" at ',
                  'line ', sr, ', column ', sc);
             exit;
         end;
@@ -595,7 +596,7 @@ begin
                 continue
             else if token <> 'YA' then begin
                 m_parser.get_pos(sr, sc);
-                writeln ('ERROR: "YA" expected, but got "', token, '" at ',
+                writeln('ERROR: "YA" expected, but got "', token, '" at ',
                     'line ', sr, ', column ', sc);
                 exit;
             end else
@@ -608,7 +609,7 @@ begin
         end;
         if token <> 'RLY' then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: "RLY" expected, but got "', token, '" at ',
+            writeln('ERROR: "RLY" expected, but got "', token, '" at ',
                 'line ', sr, ', column ', sc);
             exit;
         end;
@@ -623,13 +624,15 @@ begin
         flowstate := FS_IF;
         while m_parser.get_token(token, toktype) do begin
             // check for the end of the block
-            if token = 'OIC' then
+            if token = 'OIC' then begin
+                if flowstate <> FS_ELSE then                    
+                    i^.arg := m_code.m_count + 1;
                 flowstate := FS_LINEAR;
+            end;
             // this is intentional - there SHOULD NOT be an "else" here!
             if flowstate = FS_LINEAR then begin
                 // optimize code and update jump offset
                 optimize(i);
-                i^.arg := m_code.m_count + 2;
                 break;  // end of conditional block altogether
             end else if flowstate in [FS_IF, FS_ELSEIF] then begin
                 // elseif
@@ -681,7 +684,7 @@ begin
             end;
             // otherwise just parse the statement
             m_parser.unget_token;
-            if not eval_statement() then
+            if not eval_statement(gtfo) then
                 exit;   // the recursive instance will have raised an error
         end;
         if flowstate <> FS_LINEAR then begin
@@ -735,7 +738,7 @@ begin
                     if toktype = TT_STRING then begin
                         new(pv);
                         pv^ := islip_var.create(token);
-                        m_code.append(OP_PUSH, m_vars.append(pv, token));
+                        m_code.append(OP_PUSH, m_vars.append(pv, ''));
                     end else if not literal(token) then begin
                         m_parser.get_pos(sr, sc);
                         writeln ('ERROR: Literal expected, but got "', token,
@@ -770,7 +773,7 @@ begin
             end;
             // just parse the statement
             m_parser.unget_token;
-            if not eval_statement() then
+            if not eval_statement(nil) then
                 exit;   // the recursive instance will have raised an error
         end;
         if flowstate <> FS_LINEAR then begin
@@ -819,6 +822,7 @@ begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
+        ipcont := islip_cmp_ipcont.create;;
         if (token = 'UPPIN') or (token = 'NERFIN') then begin
             // reuse the variable to mark the operation
             if token[1] = 'U' then
@@ -887,7 +891,7 @@ begin
             sc := 0;
             m_parser.unget_token;
         end;
-        while m_parser.get_token(token, toktype) do begin
+        while true do begin
             // look for the loop closing statement
             // fetch next token
             if not m_parser.get_token(token, toktype) then begin
@@ -940,15 +944,11 @@ begin
                         m_parser.unget_token;
                     end;
                 end;
-                    m_parser.unget_token;
-            end else if token = 'GTFO' then begin
-                // add a jump out of the loop
-                ipcont.add(m_code.append(OP_JMP, ARG_NULL));
-                continue;
+                m_parser.unget_token;
             end;
             // just parse the statement
             m_parser.unget_token;
-            if not eval_statement() then
+            if not eval_statement(@ipcont) then
                 exit;   // the recursive instance will have raised an error
         end;
         if flowstate <> FS_LINEAR then begin
@@ -992,30 +992,53 @@ begin
                 '" at line ', sr, ', column ', sc);
             exit;
         end;
-        // save off the instruction count
-        sc := m_code.m_count;
-        // evaluate the expression
-        if not eval_expr() then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: Unable to evaluate expression at ',
-                'line ', sr, ', column ', sc);
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
             exit;
         end;
-        // if the variable already exists, it's been initialized
-        // somewhere else already, so just pop the top of the stack
-        // into it
-        if v <> nil then
-            // FIXME: put index into islip_cmp_var
-            m_code.append(OP_POP, m_vars.get_var_index(v^.id))
-        else begin
-            // if the expression generates only 1 instruction, it
-            // must be a constant, so let's reduce instructions
-            if m_code.m_count - sc = 1 then begin
+        // check if this is a literal
+        if toktype = TT_STRING then begin
+            new(pv);
+            pv^ := islip_var.create(token);
+            m_vars.append(pv, id);
+            // if the variable already exists, it's been initialized
+            // somewhere else already, so just pop the nev value into it;
+            // otherwise it's a constant and doesn't even need to be put onto
+            // the stack
+            if v <> nil then begin
+                // the last one in the list will be the one we need
+                m_code.append(OP_PUSH, m_vars.m_index);
+                // FIXME: put index into islip_cmp_var
+                m_code.append(OP_POP, m_vars.get_var_index(v^.id));
+            end;
+        end else if literal(token) then begin
+            // if the variable already exists, it's been initialized
+            // somewhere else already, so just pop the top of the stack
+            // into it
+            if v = nil then begin
+                // remove the last OP_PUSH and set variable identifier
                 m_code.chop_tail;
                 m_vars.m_tail^.id := id;
-            // else we need to calculate the result, so allocate
-            // a new data slot
-            end else begin
+            end else
+                // FIXME: put index into islip_cmp_var
+                m_code.append(OP_POP, m_vars.get_var_index(v^.id));
+        end else begin
+            m_parser.unget_token;
+            // evaluate the expression
+            if not eval_expr() then begin
+                m_parser.get_pos(sr, sc);
+                writeln('ERROR: Unable to evaluate expression at ',
+                    'line ', sr, ', column ', sc);
+                exit;
+            end;
+            // if the variable already exists, it's been initialized
+            // somewhere else already, so just pop the top of the stack
+            // into it
+            if v <> nil then
+                // FIXME: put index into islip_cmp_var
+                m_code.append(OP_POP, m_vars.get_var_index(v^.id))
+            else begin
                 new(pv);
                 pv^ := islip_var.create;
                 m_code.append(OP_POP, m_vars.append(pv, id));
@@ -1075,7 +1098,7 @@ begin
             exit;
         end;
         m_code.append(OP_POP, sr);
-    end else if token = 'VISIBLE' then begin
+    end else if (token = 'VISIBLE') or (token = 'INVISIBLE') then begin
         // put the value on the stack and print it
         if not eval_expr() then begin
             m_parser.get_pos(sr, sc);
@@ -1083,7 +1106,11 @@ begin
                 'line ', sr, ', column ', sc);
             exit;
         end;
-        m_code.append(OP_PRINT, ARG_NULL);
+        // differentiate between stdio and stderr
+        if token[1] = 'I' then
+            m_code.append(OP_PRINT, 1)
+        else
+            m_code.append(OP_PRINT, ARG_NULL);
     end else if token = 'GIMMEH' then begin
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
@@ -1105,7 +1132,14 @@ begin
         end;
         m_code.append(OP_READ, ARG_NULL);
         m_code.append(OP_POP, sr);
-    end else begin
+    // HACK HACK HACK!!! a not-so-ellegant way of catching loop breaks
+    end else if (gtfo <> nil) and (token = 'GTFO') then
+        gtfo^.add(m_code.append(OP_JMP, ARG_NULL))
+    // exit from program
+    // NOTE: a custom extension, not included in the spec
+    else if token = 'KTHX' then
+        m_code.append(OP_STOP, ARG_NULL)
+    else begin
         m_parser.unget_token;
         // try to evaluate the "IT" implied variable, which is
         // always on slot #1
@@ -1184,7 +1218,7 @@ begin
                     end;
                     // unget token for reevaluation
                     m_parser.unget_token;
-                    if not eval_statement then begin
+                    if not eval_statement(nil) then begin
                         //writeln('ERROR: Unable to parse script');
                         compile := false;
                         exit;
@@ -1344,6 +1378,7 @@ begin
         p := p^.next;
         inc(i);
     end;
+    get_var := nil;
 end;
 
 // ====================================================

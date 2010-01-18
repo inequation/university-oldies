@@ -115,7 +115,7 @@ begin
         write('  0x', IntToHex(i, 8), ' = ');
         if g_data[i].get_type = VT_STRING then
             write('"');
-        g_data[i].echo;
+        g_data[i].echo(false);
         if g_data[i].get_type = VT_STRING then
             write('"');
         writeln;

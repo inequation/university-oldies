@@ -131,8 +131,13 @@ begin
             OP_PRINT:
                 begin
                     m_stack.pop(@v);
-                    v.echo;
-                    writeln;
+                    if m_code^[i].arg = 1 then begin
+                        v.echo(true);
+                        writeln(stderr);
+                    end else begin
+                        v.echo(false);
+                        writeln;
+                    end;
                 end;
             OP_READ:
                 begin
@@ -159,6 +164,17 @@ begin
                         i := m_code^[i].arg;
                         continue;
                     end;
+                end;
+            OP_INCR:
+                begin
+                    pv := m_stack.peek;
+                    v.destroy;
+                    if m_code^[i].arg = 0 then
+                        v := islip_var.create(-1)
+                    else
+                        v := islip_var.create(1);
+                    pv^.math(@v, OP_ADD);
+                    v.reset_value;
                 end;
             else begin
                 writeln('ERROR: Invalid instruction 0x',

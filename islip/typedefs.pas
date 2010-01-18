@@ -17,6 +17,7 @@ type
     // these don't have anything to do with C, but they're here for convenience
     cfile   = file of char;
     pcfile  = ^cfile;
+    pbool   = ^boolean;
 
 implementation
 
