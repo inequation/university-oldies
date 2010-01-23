@@ -6,7 +6,7 @@
 unit compiler;
 
 // uncomment the following to enable debug printouts
-//{$DEFINE DEBUG}
+{$DEFINE DEBUG}
 
 {$IFDEF fpc}
     {$MODE objfpc}
@@ -583,7 +583,7 @@ begin
             exit;
         end;
 {$IFDEF DEBUG}
-        writeln('DEBUG: eval_expr: identifier');
+        writeln('DEBUG: eval_expr: identifier ', token);
 {$ENDIF}
         // FIXME: search for functions, too
         // FIXME: implement them first!
@@ -755,7 +755,7 @@ begin
                     end;
                     if token <> 'WAI' then begin
                         m_parser.get_pos(sr, sc);
-                        writeln ('ERROR: "WAI" expected, but got "', token,
+                        writeln('ERROR: "WAI" expected, but got "', token,
                             '" at line ', sr, ', column ', sc);
                         exit;
                     end;
@@ -830,7 +830,7 @@ begin
                         m_code.append(OP_PUSH, m_vars.append(pv, ''));
                     end else if not literal(token) then begin
                         m_parser.get_pos(sr, sc);
-                        writeln ('ERROR: Literal expected, but got "', token,
+                        writeln('ERROR: Literal expected, but got "', token,
                             '" at line ', sr, ', column ', sc);
                         exit;
                     end;
@@ -881,7 +881,7 @@ begin
         end;
         if token <> 'IN' then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: "IN" expected, but got "', token, '" at ',
+            writeln('ERROR: "IN" expected, but got "', token, '" at ',
                  'line ', sr, ', column ', sc);
             exit;
         end;
@@ -892,7 +892,7 @@ begin
         end;
         if token <> 'YR' then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: "YR" expected, but got "', token, '" at ',
+            writeln('ERROR: "YR" expected, but got "', token, '" at ',
                  'line ', sr, ', column ', sc);
             exit;
         end;
@@ -925,7 +925,7 @@ begin
             end;
             if token <> 'YR' then begin
                 m_parser.get_pos(sr, sc);
-                writeln ('ERROR: "YR" expected, but got "', token, '" at ',
+                writeln('ERROR: "YR" expected, but got "', token, '" at ',
                     'line ', sr, ', column ', sc);
                 exit;
             end;
@@ -972,7 +972,7 @@ begin
                 ipcont.add(m_code.append(OP_CNDJMP, ARG_NULL));
             end else begin
                 m_parser.get_pos(sr, sc);
-                writeln ('ERROR: "TIL" or "WILE" expected, but got "', token,
+                writeln('ERROR: "TIL" or "WILE" expected, but got "', token,
                     '" at line ', sr, ', column ', sc);
                 exit;
             end;
@@ -1002,7 +1002,7 @@ begin
                     end;
                     if token <> 'YR' then begin
                         m_parser.get_pos(sr, sc);
-                        writeln ('ERROR: "YR" expected, but got "', token,
+                        writeln('ERROR: "YR" expected, but got "', token,
                         '" at line ', sr, ', column ', sc);
                         exit;
                     end;
@@ -1079,7 +1079,7 @@ begin
         // check if it's a valid identifier
         if not is_valid_ident(token) then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: Invalid characters in identifier at ',
+            writeln('ERROR: Invalid characters in identifier at ',
                 'line ', sr, ', column ', sc);
             exit;
         end;
@@ -1217,9 +1217,9 @@ begin
         m_parser.unget_token;
         // try to evaluate the "IT" implied variable, which is
         // always on slot #1
-        if eval_expr then
-            m_code.append(OP_POP, 1)
-        else begin
+        if eval_expr then begin
+            m_code.append(OP_POP, 1);
+        end else begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: Unknown keyword "', token, '" at line ', sr,
                 ', column ', sc);
