@@ -12,6 +12,10 @@ interface
 
 uses typedefs;
 
+const
+    TOKEN_HISTORY_SIZE  =   5;  // how many previous tokens the parser is
+                                // supposed to remember; must be >= 1
+
 type
     // helper types
     pstring = ^string;
@@ -63,15 +67,8 @@ type
 
             m_row       : size_t;
             m_col       : size_t;
-            m_token     : string;
-            m_ptoken    : string;
-            m_ptype     : islip_parser_token_type;
-            m_p2token   : string;
-            m_p2type    : islip_parser_token_type;
-            m_p3token   : string;
-            m_p3type    : islip_parser_token_type;
-            m_p4token   : string;
-            m_p4type    : islip_parser_token_type;
+            m_tokens    : array[1..TOKEN_HISTORY_SIZE] of string;
+            m_types     : array[1..TOKEN_HISTORY_SIZE] of islip_parser_token_type;
 
             function comment : boolean;
     end;
@@ -117,17 +114,14 @@ end;
 // ========================================================
 
 constructor islip_parser.create(var input : cfile);
+var
+    i   : size_t;
 begin
     m_reader := islip_reader.create(input);
-    m_token := '';
-    m_ptoken := '';
-    m_ptype := TT_WS;
-    m_p2token := '';
-    m_p2type := TT_WS;
-    m_p3token := '';
-    m_p3type := TT_WS;
-    m_p4token := '';
-    m_p4type := TT_WS;
+    for i := 1 to TOKEN_HISTORY_SIZE do begin
+        m_tokens[i] := '';
+        m_types[i] := TT_WS;
+    end;
 end;
 
 function islip_parser.comment : boolean;
@@ -135,15 +129,15 @@ var
     c   : char;
 begin
     comment := false;
-    if m_token = 'BTW' then begin
+    if m_tokens[1] = 'BTW' then begin
         // skip characters until we read a newline and
         // start a new token
         while m_reader.get_char(c) do
             if c in [chr(10), chr(13)] then begin
-                m_token := '';
+                m_tokens[1] := '';
                 break;
             end;
-    end else if m_token = 'OBTW' then begin
+    end else if m_tokens[1] = 'OBTW' then begin
         // skip characters until we read a "TLDR"
         while m_reader.get_char(c) do begin
             if c = 'T' then begin
@@ -158,7 +152,7 @@ begin
                         if c = 'R' then begin
                             if not m_reader.get_char(c) then
                                 exit;
-                            m_token := '';
+                            m_tokens[1] := '';
                             break;
                         end;
                     end;
@@ -174,54 +168,54 @@ function islip_parser.get_token(var s : string; var t : islip_parser_token_type)
 var
     c       : char;
     esc     : boolean;
+    i       : size_t;
 begin
     get_token := true;
 
     esc := false;
 
     // if we still have something to throw, do it
-    if length(m_token) > 0 then begin
-        s := m_token;
-        t := m_ptype;
-        m_p4token := m_p3token;
-        m_p3token := m_p2token;
-        m_p2token := m_ptoken;
-        m_ptoken := m_token;
-        m_token[1] := chr(0);    // HACK HACK HACK! somehow necessary for the
-        m_token := '';           // string to be zeroed in FPC
+    if length(m_tokens[1]) > 0 then begin
+        s := m_tokens[1];
+        t := m_types[1];
+        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+            m_tokens[i] := m_tokens[i - 1];
+            m_types[i] := m_types[i - 1];
+        end;
+        m_tokens[1] := chr(0);  // HACK HACK HACK! somehow necessary for the
+        m_tokens[1] := '';         // string to be zeroed in FPC
+        m_types[1] := TT_WS;
         exit;
     end;
 
     // initial state
-    t := TT_WS;
+    m_types[1] := TT_WS;
 
     while m_reader.get_char(c) do begin
-        case t of
+        case m_types[1] of
             TT_WS:
                 begin
                     if c = '"' then begin
-                        t := TT_STRING;
+                        m_types[1] := TT_STRING;
                         // keep track of where we started the token
                         m_reader.get_pos(m_row, m_col);
                     end else if c in [chr(10), chr(13), ','] then begin
                         if c = ',' then
                             c := chr(10);
-                        m_token := c;
-                        s := m_token;
-                        m_p4token := m_p3token;
-                        m_p3token := m_p2token;
-                        m_p2token := m_ptoken;
-                        m_p4type := m_p3type;
-                        m_p3type := m_p2type;
-                        m_p2type := m_ptype;
-                        m_ptoken := m_token;
-                        m_ptype := t;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
-                        m_token := '';           // necessary for the string to
-                        exit;                    // be zeroed in FPC
+                        m_tokens[1] := c;
+                        s := m_tokens[1];
+                        t := m_types[1];
+                        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+                            m_tokens[i] := m_tokens[i - 1];
+                            m_types[i] := m_types[i - 1];
+                        end;
+                        m_tokens[1] := chr(0);  // HACK HACK HACK! somehow
+                        m_tokens[1] := '';      // necessary for the string to
+                        m_types[1] := TT_WS;    // be zeroed in FPC
+                        exit;
                     end else if ord(c) > 32 then begin
-                        m_token := m_token + c;
-                        t := TT_EXPR;
+                        m_tokens[1] := m_tokens[1] + c;
+                        m_types[1] := TT_EXPR;
                         // keep track of where we started the token
                         m_reader.get_pos(m_row, m_col);
                     end;
@@ -231,7 +225,7 @@ begin
                     if c in [chr(10), chr(13), ','] then begin
                         // handle comments
                         if comment then begin
-                            if m_token = '' then
+                            if m_tokens[1] = '' then
                                 continue;
                         end else begin
                             writeln('ERROR: Unterminated multi-line comment');
@@ -240,81 +234,74 @@ begin
                         end;
                         // throw what we've got so far and keep that newline in
                         // mind
-                        s := m_token;
-                        m_p4token := m_p3token;
-                        m_p3token := m_p2token;
-                        m_p2token := m_ptoken;
-                        m_p4type := m_p3type;
-                        m_p3type := m_p2type;
-                        m_p2type := m_ptype;
-                        m_ptoken := m_token;
-                        m_ptype := t;
+                        s := m_tokens[1];
+                        t := m_types[1];
+                        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+                            m_tokens[i] := m_tokens[i - 1];
+                            m_types[i] := m_types[i - 1];
+                        end;
                         if c = ',' then
                             c := chr(10);
-                        m_token := c;
+                        m_tokens[1] := c;
                         exit;
                     end else if ord(c) > 32 then
-                        m_token := m_token + c
+                        m_tokens[1] := m_tokens[1] + c
                     else begin
                         // handle comments
                         if comment then begin
-                            if m_token = '' then
+                            if m_tokens[1] = '' then
                                 continue;
                         end else begin
                             writeln('ERROR: Unterminated multi-line comment');
                             get_token := false;
                             exit;
                         end;
-                        s := m_token;
-                        m_p4token := m_p3token;
-                        m_p3token := m_p2token;
-                        m_p2token := m_ptoken;
-                        m_p4type := m_p3type;
-                        m_p3type := m_p2type;
-                        m_p2type := m_ptype;
-                        m_ptoken := m_token;
-                        m_ptype := t;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
-                        m_token := '';           // necessary for the string to
-                        exit;                    // be zeroed in FPC
+                        s := m_tokens[1];
+                        t := m_types[1];
+                        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+                            m_tokens[i] := m_tokens[i - 1];
+                            m_types[i] := m_types[i - 1];
+                        end;
+                        m_tokens[1] := chr(0);  // HACK HACK HACK! somehow
+                        m_tokens[1] := '';      // necessary for the string to
+                        m_types[1] := TT_WS;    // be zeroed in FPC
+                        exit;
                     end;
                 end;
             TT_STRING:
                 begin
                     if c = ':' then begin
                         if esc then begin
-                            m_token := m_token + c;
+                            m_tokens[1] := m_tokens[1] + c;
                             esc := false;
                         end else
                             esc := true;
                     end else if esc then begin
                         if c = ')' then
-                            m_token := m_token + chr(10)
+                            m_tokens[1] := m_tokens[1] + chr(10)
                         else if c = '>' then
-                            m_token := m_token + chr(9)
+                            m_tokens[1] := m_tokens[1] + chr(9)
                         else if c = 'o' then
-                            m_token := m_token + chr(7)
+                            m_tokens[1] := m_tokens[1] + chr(7)
                         else if c = '"' then
-                            m_token := m_token + c
+                            m_tokens[1] := m_tokens[1] + c
                         // FIXME: hex, var, unicode name
                         else    // invalid escape sequence, handle the error
                             break;
                         esc := false;
                     end else if c <> '"' then
-                        m_token := m_token + c
+                        m_tokens[1] := m_tokens[1] + c
                     else begin
-                        s := m_token;
-                        m_p4token := m_p3token;
-                        m_p3token := m_p2token;
-                        m_p2token := m_ptoken;
-                        m_p4type := m_p3type;
-                        m_p3type := m_p2type;
-                        m_p2type := m_ptype;
-                        m_ptoken := m_token;
-                        m_ptype := t;
-                        m_token[1] := chr(0);    // HACK HACK HACK! somehow
-                        m_token := '';           // necessary for the string to
-                        exit;                    // be zeroed in FPC
+                        s := m_tokens[1];
+                        t := m_types[1];
+                        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+                            m_tokens[i] := m_tokens[i - 1];
+                            m_types[i] := m_types[i - 1];
+                        end;
+                        m_tokens[1] := chr(0);  // HACK HACK HACK! somehow
+                        m_tokens[1] := '';      // necessary for the string to
+                        m_types[1] := TT_WS;    // be zeroed in FPC
+                        exit;
                     end;
                 end;
         end;
@@ -337,35 +324,35 @@ begin
         s := '!';
     end else begin
         // return the last token on eof
-        s := m_token;
-        m_p4token := m_p3token;
-        m_p3token := m_p2token;
-        m_p2token := m_ptoken;
-        m_p4type := m_p3type;
-        m_p3type := m_p2type;
-        m_p2type := m_ptype;
-        m_ptoken := m_token;
-        m_ptype := t;
-        m_token[1] := chr(0);    // HACK HACK HACK! somehow
-        m_token := '';
+        s := m_tokens[1];
+        for i := TOKEN_HISTORY_SIZE downto 2 do begin
+            m_tokens[i] := m_tokens[i - 1];
+            m_types[i] := m_types[i - 1];
+        end;
+        m_tokens[1] := chr(0);  // HACK HACK HACK! somehow
+        m_tokens[1] := '';      // necessary for the string to
+        m_types[1] := TT_WS;    // be zeroed in FPC
     end;
 end;
 
 procedure islip_parser.unget_token;
+var
+    i   : size_t;
 begin
-    if length(m_ptoken) > 0 then begin
-        m_token := m_ptoken;
-        m_ptoken := m_p2token;
-        m_p2token := m_p3token;
-        m_p3token := m_p4token;
-        m_p4token := '';
+    if length(m_tokens[2]) > 0 then begin
+        for i := 1 to TOKEN_HISTORY_SIZE - 1 do begin
+            m_tokens[i] := m_tokens[i + 1];
+            m_types[i] := m_types[i + 1];
+        end;
+        m_tokens[5] := '';
+        m_types[5] := TT_WS;
     end else
-        writeln('WARNING: Attempted to unget five times in a row');
+        writeln('WARNING: Attempted to unget tokens beyond token history size');
 end;
 
 procedure islip_parser.get_pos(var row : size_t; var col : size_t);
 begin
-    row := m_row;
+    row := m_row + 1;
     col := m_col - 1;
 end;
 

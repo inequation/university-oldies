@@ -212,11 +212,16 @@ begin
 end;
 
 procedure islip_stack.push(pv : pislip_var);
+var
+    i   : size_t;
 begin
     if m_top = length(m_stack) then begin
         //writeln('ERROR: Stack overflow');
         //exit;
         setlength(m_stack, length(m_stack) * 2);
+        // initialize the new part of the stack
+        for i := length(m_stack) div 2 + 1 to length(m_stack) do
+            m_stack[i] := islip_var.create;
     end;
     inc(m_top);
     if pv <> nil then

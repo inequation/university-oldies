@@ -6,7 +6,7 @@
 unit compiler;
 
 // uncomment the following to enable debug printouts
-{$DEFINE DEBUG}
+//{$DEFINE DEBUG}
 
 {$IFDEF fpc}
     {$MODE objfpc}
@@ -118,6 +118,11 @@ type
             function eval_expr : boolean;
             // parses a number or boolean literal
             function literal(token : string) : boolean;
+            // parses a variable assignment R-value
+            function variable_rvalue(id : string) : boolean;
+
+            // checks if the given string is a valid LOLCODE identifier
+            function is_valid_ident(s : string) : boolean;
 
             // optimizes some instruction combinations
             procedure optimize(start : pislip_cmp_inst);
@@ -236,10 +241,94 @@ begin
             end;
         end;
         pv^ := islip_var.create(i);
-    end;    
+    end;
     // generate the instructions
     m_code.append(OP_PUSH, m_vars.append(pv, ''));
     literal := true;
+end;
+
+function islip_compiler.variable_rvalue(id : string) : boolean;
+var
+    token   : string;
+    toktype : islip_parser_token_type;
+    pv      : pislip_var;
+    v       : pislip_cmp_var;
+    sr, sc  : size_t;
+begin
+    variable_rvalue := false;
+    // try to fetch an existing variable
+    v := m_vars.get_var(id);
+    // fetch next token
+    if not m_parser.get_token(token, toktype) then begin
+        writeln('ERROR: Unexpected end of file');
+        exit;
+    end;
+    // check if this is a literal
+    if toktype = TT_STRING then begin
+        new(pv);
+        pv^ := islip_var.create(token);
+        m_vars.append(pv, id);
+        // if the variable already exists, it's been initialized
+        // somewhere else already, so just pop the nev value into it;
+        // otherwise it's a constant and doesn't even need to be put onto
+        // the stack
+        if v <> nil then begin
+            // nullify the variable ID
+            m_vars.m_tail^.id := '';
+            // the last one in the list will be the one we need
+            m_code.append(OP_PUSH, m_vars.m_index);
+            // FIXME: put index into islip_cmp_var
+            m_code.append(OP_POP, m_vars.get_var_index(v^.id));
+        end;
+    end else if literal(token) then begin
+        // if the variable already exists, it's been initialized
+        // somewhere else already, so just pop the top of the stack
+        // into it
+        if v = nil then begin
+            // remove the last OP_PUSH and set variable identifier
+            m_code.chop_tail;
+            m_vars.m_tail^.id := id;
+        end else
+            // FIXME: put index into islip_cmp_var
+            m_code.append(OP_POP, m_vars.get_var_index(v^.id));
+    end else begin
+        m_parser.unget_token;
+        // evaluate the expression
+        if not eval_expr() then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: Unable to evaluate expression at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // if the variable already exists, it's been initialized
+        // somewhere else already, so just pop the top of the stack
+        // into it
+        if v <> nil then
+            // FIXME: put index into islip_cmp_var
+            m_code.append(OP_POP, m_vars.get_var_index(v^.id))
+        else begin
+            new(pv);
+            pv^ := islip_var.create;
+                m_code.append(OP_POP, m_vars.append(pv, id));
+        end;
+    end;
+    variable_rvalue := true;
+end;
+
+function islip_compiler.is_valid_ident(s : string) : boolean;
+var
+    i   : size_t;
+begin
+    if length(s) < 1 then begin
+        is_valid_ident := false;
+        exit;
+    end;
+    is_valid_ident := true;
+    for i := 1 to length(s) do
+        if not (s[i] in ['a'..'z', 'A'..'Z']) then begin
+            is_valid_ident := false;
+            exit;
+        end;
 end;
 
 // ====================================================
@@ -487,7 +576,7 @@ begin
     // either a variable identifier, or a number or boolean literal
     end else if not literal(token) then begin
         // check for illegal characters
-        if not IsValidIdent(token) then begin
+        if not is_valid_ident(token) then begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: Invalid characters in identifier at line ',
                 sr, ', column ', sc);
@@ -497,6 +586,7 @@ begin
         writeln('DEBUG: eval_expr: identifier');
 {$ENDIF}
         // FIXME: search for functions, too
+        // FIXME: implement them first!
         i := m_vars.get_var_index(token);
         if i = 0 then begin
             m_parser.get_pos(sr, sc);
@@ -519,8 +609,8 @@ var
     token, id   : string;
     toktype     : islip_parser_token_type;
     sr, sc, tmp : size_t;
-    v           : pislip_cmp_var;
     pv          : pislip_var;
+    v           : pislip_cmp_var;
     i           : pislip_cmp_inst;
     flowstate   : islip_flowstate;
     ipcont      : islip_cmp_ipcont;
@@ -539,7 +629,6 @@ begin
         exit;
     end;
 
-    v := nil;
 {$IFDEF DEBUG}
     writeln('DEBUG: eval_statement: Token: "', token, '", type: ', int(toktype));
 {$ENDIF}
@@ -625,7 +714,7 @@ begin
         while m_parser.get_token(token, toktype) do begin
             // check for the end of the block
             if token = 'OIC' then begin
-                if flowstate <> FS_ELSE then                    
+                if flowstate <> FS_ELSE then
                     i^.arg := m_code.m_count + 1;
                 flowstate := FS_LINEAR;
             end;
@@ -846,13 +935,14 @@ begin
                 exit;
             end;
             // check for illegal characters
-            if not IsValidIdent(token) then begin
+            if not is_valid_ident(token) then begin
                 m_parser.get_pos(sr, sc);
                 writeln('ERROR: Invalid characters in identifier at line ',
                     sr, ', column ', sc);
                 exit;
             end;
             // FIXME: search for functions, too
+            // FIXME: implement them first!
             tmp := m_vars.get_var_index(token);
             if tmp = 0 then begin
                 m_parser.get_pos(sr, sc);
@@ -957,38 +1047,16 @@ begin
         end;
         ipcont.fill(m_code.m_count + 1);
         ipcont.destroy;
-    // variable assignation
-    end else if token = 'LOL' then begin
+    // variable creation (and optionally assignment)
+    end else if token = 'I' then begin
         // fetch next token
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
-        // check if it's a valid identifier
-        if not IsValidIdent(token) then begin
+        if token <> 'HAS' then begin
             m_parser.get_pos(sr, sc);
-            writeln ('ERROR: Invalid characters in identifier at ',
-                'line ', sr, ', column ', sc);
-            exit;
-        end;
-        // save off the ID
-        id := token;
-        // now see if it hasn't been used already
-        // try variables first
-        v := m_vars.get_var(id);
-        // now try functions - if we find anything, it's a misused
-        // identifier and therefore a syntax error
-        // TODO
-        {if m_blocks.get_func(token) <> nil then begin
-            end;}
-        // read the next part of the assignment statement
-        if not m_parser.get_token(token, toktype) then begin
-            writeln('ERROR: Unexpected end of file');
-            exit;
-        end;
-        if token <> 'R' then begin
-            m_parser.get_pos(sr, sc);
-            writeln('ERROR: "R" expected, but got "', token,
+            writeln('ERROR: "HAS" expected, but got "', token,
                 '" at line ', sr, ', column ', sc);
             exit;
         end;
@@ -997,60 +1065,48 @@ begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
-        // check if this is a literal
-        if toktype = TT_STRING then begin
-            new(pv);
-            pv^ := islip_var.create(token);
-            m_vars.append(pv, id);
-            // if the variable already exists, it's been initialized
-            // somewhere else already, so just pop the nev value into it;
-            // otherwise it's a constant and doesn't even need to be put onto
-            // the stack
-            if v <> nil then begin
-                // the last one in the list will be the one we need
-                m_code.append(OP_PUSH, m_vars.m_index);
-                // FIXME: put index into islip_cmp_var
-                m_code.append(OP_POP, m_vars.get_var_index(v^.id));
-            end;
-        end else if literal(token) then begin
-            // if the variable already exists, it's been initialized
-            // somewhere else already, so just pop the top of the stack
-            // into it
-            if v = nil then begin
-                // remove the last OP_PUSH and set variable identifier
-                m_code.chop_tail;
-                m_vars.m_tail^.id := id;
-            end else
-                // FIXME: put index into islip_cmp_var
-                m_code.append(OP_POP, m_vars.get_var_index(v^.id));
-        end else begin
-            m_parser.unget_token;
-            // evaluate the expression
-            if not eval_expr() then begin
-                m_parser.get_pos(sr, sc);
-                writeln('ERROR: Unable to evaluate expression at ',
-                    'line ', sr, ', column ', sc);
-                exit;
-            end;
-            // if the variable already exists, it's been initialized
-            // somewhere else already, so just pop the top of the stack
-            // into it
-            if v <> nil then
-                // FIXME: put index into islip_cmp_var
-                m_code.append(OP_POP, m_vars.get_var_index(v^.id))
-            else begin
-                new(pv);
-                pv^ := islip_var.create;
-                m_code.append(OP_POP, m_vars.append(pv, id));
-            end;
+        if token <> 'A' then begin
+            m_parser.get_pos(sr, sc);
+            writeln('ERROR: "A" expected, but got "', token,
+                '" at line ', sr, ', column ', sc);
+            exit;
         end;
+        // fetch next token
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        // check if it's a valid identifier
+        if not is_valid_ident(token) then begin
+            m_parser.get_pos(sr, sc);
+            writeln ('ERROR: Invalid characters in identifier at ',
+                'line ', sr, ', column ', sc);
+            exit;
+        end;
+        // save off the identifier
+        id := token;
+        // read the next part of the assignment statement
+        if not m_parser.get_token(token, toktype) then begin
+            writeln('ERROR: Unexpected end of file');
+            exit;
+        end;
+        if token <> 'ITZ' then begin
+            // unget the token for reevaluation
+            m_parser.unget_token;
+            // add an untyped var
+            new(pv);
+            pv^ := islip_var.create;
+            m_vars.append(pv, id);
+        // else try reading the R-value
+        end else if not variable_rvalue(id) then
+            exit;   // we rely on variable_rvalue to raise errors
     end else if token = 'MAEK' then begin
         if not m_parser.get_token(token, toktype) then begin
             writeln('ERROR: Unexpected end of file');
             exit;
         end;
         // check for illegal characters
-        if not IsValidIdent(token) then begin
+        if not is_valid_ident(token) then begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: Invalid characters in identifier at line ',
                 sr, ', column ', sc);
@@ -1117,7 +1173,7 @@ begin
             exit;
         end;
         // check for illegal characters
-        if not IsValidIdent(token) then begin
+        if not is_valid_ident(token) then begin
             m_parser.get_pos(sr, sc);
             writeln('ERROR: Invalid characters in identifier at line ',
                 sr, ', column ', sc);
@@ -1140,6 +1196,24 @@ begin
     else if token = 'KTHX' then
         m_code.append(OP_STOP, ARG_NULL)
     else begin
+        // look for a variable first
+        v := m_vars.get_var(token);
+        if v <> nil then begin
+            // fetch next token
+            if not m_parser.get_token(token, toktype) then begin
+                writeln('ERROR: Unexpected end of file');
+                exit;
+            end;
+            if token = 'R' then begin
+                // we have an assignation here
+                if not variable_rvalue(v^.id) then
+                    exit;   // rely on variable_rvalue to raise errors
+                // manual exit w/success
+                eval_statement := true;
+                exit;
+            end else
+                m_parser.unget_token;
+        end;
         m_parser.unget_token;
         // try to evaluate the "IT" implied variable, which is
         // always on slot #1
