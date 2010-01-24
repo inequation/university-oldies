@@ -22,7 +22,7 @@ BOTH SAEM a AN 0, O RLY?
 				BTW b = 0 -> constant
 				BOTH SAEM c AN 0, O RLY?
 				YA RLY, VISIBLE "Constant function y = 0 -> any x is a solution"
-				NO WAI, VISIBLE SMOOSH "Constant fucntion y = " c " -> no solution"
+				NO WAI, VISIBLE SMOOSH "Constant function y = " c " -> no solution"
 				OIC
 			NO WAI
 				BTW x = -c/b

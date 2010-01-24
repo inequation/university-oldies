@@ -56,7 +56,7 @@ type
             function get_token(var s : string; var t : islip_parser_token_type)
                 : boolean;
             // returns to previous token for reinterpretation
-            // NOTE: can only roll 1 token back
+            // NOTE: can only roll TOKEN_HISTORY_SIZE tokens back
             procedure unget_token;
             // retrieves current token starting position in input file (for
             // error reporting)

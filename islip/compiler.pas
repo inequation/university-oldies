@@ -6,7 +6,7 @@
 unit compiler;
 
 // uncomment the following to enable debug printouts
-{$DEFINE DEBUG}
+//{$DEFINE DEBUG}
 
 {$IFDEF fpc}
     {$MODE objfpc}
