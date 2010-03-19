@@ -1,22 +1,27 @@
-#ifdef __cplusplus
-    #include <cstdlib>
-#else
-    #include <stdlib.h>
-#endif
-#ifdef __APPLE__
-#include <SDL/SDL.h>
-#else
-#include <SDL.h>
-#endif
+// AC-130 shooter
+// Written by Leszek Godlewski <leszgod081@student.polsl.pl>
 
-int main ( int argc, char** argv )
-{
-    // initialize SDL video
-    if ( SDL_Init( SDL_INIT_VIDEO ) < 0 )
-    {
-        printf( "Unable to init SDL: %s\n", SDL_GetError() );
+#include "ac130.h"
+
+#include <SDL/SDL.h>
+#include <GL/glew.h>
+#define NO_SDL_GLEXT	// GLEW takes care of extensions
+#include <SDL/SDL_opengl.h>
+
+
+
+int main (int argc, char *argv[]) {
+    // initialize SDL
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_TIMER) < 0) {
+        fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
         return 1;
     }
+	
+	// initialize OpenGL mode
+	if (!ac_renderer_init()) {
+		fprintf(stderr, "Unable to init OpenGL\n");
+		return 1;
+	}
 
     // make sure SDL cleans up before exit
     atexit(SDL_Quit);
