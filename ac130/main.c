@@ -3,13 +3,6 @@
 
 #include "ac130.h"
 
-#include <SDL/SDL.h>
-#include <GL/glew.h>
-#define NO_SDL_GLEXT	// GLEW takes care of extensions
-#include <SDL/SDL_opengl.h>
-
-
-
 int main (int argc, char *argv[]) {
     // initialize SDL
     if (SDL_Init(SDL_INIT_VIDEO | SDL_TIMER) < 0) {
