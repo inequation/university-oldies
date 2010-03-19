@@ -8,7 +8,7 @@ float a = 0.f, b = 0.f, c = 0.f;
 int parse_eq(const char *s) {
 	if (!sscanf(s, "%fx^2%+fx%+f")) {
 		if (!sscanf(s, "%fx%+f")) {
-			if (!sscanef(s, "%f"))
+			if (!sscanf(s, "%f"))
 				return 0;
 		}
 	}
