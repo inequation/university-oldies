@@ -2,12 +2,12 @@
 <CodeBlocks_project_file>
 	<FileVersion major="1" minor="6" />
 	<Project>
-		<Option title="AC-130 game" />
+		<Option title="AC-130 terrain viewer" />
 		<Option pch_mode="2" />
 		<Option compiler="gcc" />
 		<Build>
 			<Target title="Debug">
-				<Option output="bin/Debug/ac130" prefix_auto="1" extension_auto="1" />
+				<Option output="bin/Debug/terview" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
@@ -16,7 +16,7 @@
 				</Compiler>
 			</Target>
 			<Target title="Release">
-				<Option output="bin/Release/ac130" prefix_auto="1" extension_auto="1" />
+				<Option output="bin/Release/terview" prefix_auto="1" extension_auto="1" />
 				<Option object_output="obj/Release/" />
 				<Option type="0" />
 				<Option compiler="gcc" />
@@ -35,22 +35,11 @@
 		</Compiler>
 		<Linker>
 			<Add library="SDL" />
-			<Add library="GLEW" />
-			<Add library="GL" />
 		</Linker>
-		<Unit filename="ac130.h" />
-		<Unit filename="ac_math.h" />
-		<Unit filename="ac_math_sse.h" />
-		<Unit filename="game.c">
-			<Option compilerVar="CC" />
-		</Unit>
 		<Unit filename="generator.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="main.c">
-			<Option compilerVar="CC" />
-		</Unit>
-		<Unit filename="renderer.c">
+		<Unit filename="terview.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>

@@ -1,91 +1,93 @@
 // AC-130 shooter
 // Written by Leszek Godlewski <leszgod081@student.polsl.pl>
 
+// Main module
+
 #include "ac130.h"
 
 int main (int argc, char *argv[]) {
-    // initialize SDL
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_TIMER) < 0) {
-        fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
-        return 1;
-    }
-	
-	// initialize OpenGL mode
-	if (!ac_renderer_init()) {
-		fprintf(stderr, "Unable to init OpenGL\n");
+	Uint32		prevTime;	/// Time of the previous frame time in milliseconds.
+	Uint32		curTime;	/// Time of the current frame time in milliseconds.
+	float		frameTime;	/// \ref curTime - \ref prevTime / 1000 (in seconds)
+	SDL_Event	event;
+	ac_input_t	prevInput;
+	ac_input_t	curInput;
+	bool		done;
+
+	// initialize SDL
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
+		fprintf(stderr, "Unable to init SDL: %s\n", SDL_GetError());
 		return 1;
 	}
 
-    // make sure SDL cleans up before exit
-    atexit(SDL_Quit);
+	// initialize renderer
+	if (!ac_renderer_init()) {
+		fprintf(stderr, "Unable to init renderer\n");
+		return 1;
+	}
 
-    // create a new window
-    SDL_Surface* screen = SDL_SetVideoMode(640, 480, 16,
-                                           SDL_HWSURFACE|SDL_DOUBLEBUF);
-    if ( !screen )
-    {
-        printf("Unable to set 640x480 video: %s\n", SDL_GetError());
-        return 1;
-    }
+	// initialize tick counter
+	prevTime = SDL_GetTicks();
 
-    // load an image
-    SDL_Surface* bmp = SDL_LoadBMP("cb.bmp");
-    if (!bmp)
-    {
-        printf("Unable to load bitmap: %s\n", SDL_GetError());
-        return 1;
-    }
-    
-    // centre the bitmap on screen
-    SDL_Rect dstrect;
-    dstrect.x = (screen->w - bmp->w) / 2;
-    dstrect.y = (screen->h - bmp->h) / 2;
+	// make sure SDL cleans up before exit
+	atexit(SDL_Quit);
 
-    // program main loop
-    bool done = false;
-    while (!done)
-    {
-        // message processing loop
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
-            // check for messages
-            switch (event.type)
-            {
-                // exit if the window is closed
-            case SDL_QUIT:
-                done = true;
-                break;
+	// clear out input structs
+	memset(&prevInput, 0, sizeof(prevInput));
+	memset(&curInput, 0, sizeof(curInput));
 
-                // check for keypresses
-            case SDL_KEYDOWN:
-                {
-                    // exit if ESCAPE is pressed
-                    if (event.key.keysym.sym == SDLK_ESCAPE)
-                        done = true;
-                    break;
-                }
-            } // end switch
-        } // end of message processing
+	// initialize game logic
+	ac_game_init();
 
-        // DRAWING STARTS HERE
-        
-        // clear screen
-        SDL_FillRect(screen, 0, SDL_MapRGB(screen->format, 0, 0, 0));
+	// program main loop
+	done = false;
+	while (!done) {
+		curTime = SDL_GetTicks();
+		frameTime = (float)(curTime - prevTime) * 0.001;
+		prevTime = curTime;
 
-        // draw bitmap
-        SDL_BlitSurface(bmp, 0, screen, &dstrect);
+		memset(&curInput, 0, sizeof(curInput));
+		memset(&prevInput, 0, sizeof(prevInput));
+		// copy buttons from last frame in case there was no MOUSEBUTTONUP event
+		curInput.flags |= prevInput.flags
+			& (INPUT_MOUSE_LEFT | INPUT_MOUSE_RIGHT);
+		// dispatch events
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+				// exit if the window is closed
+				case SDL_QUIT:
+					done = true;
+					break;
+				case SDL_KEYDOWN:
+					if (event.key.keysym.sym == SDLK_ESCAPE)
+						done = true;
+					else if (event.key.keysym.sym == 'N'
+								|| event.key.keysym.sym == 'n')
+						curInput.flags |= INPUT_NEGATIVE;
+					break;
+				case SDL_MOUSEBUTTONDOWN:
+				case SDL_MOUSEBUTTONUP:
+					if (event.button.state == SDL_PRESSED)
+						curInput.flags |= event.button.button == SDL_BUTTON_LEFT
+							? INPUT_MOUSE_LEFT : INPUT_MOUSE_RIGHT;
+					else
+						curInput.flags &= event.button.button == SDL_BUTTON_LEFT
+							? ~INPUT_MOUSE_LEFT : ~INPUT_MOUSE_RIGHT;
+					break;
+				case SDL_MOUSEMOTION:
+					curInput.deltaX = event.motion.xrel;
+					curInput.deltaY = event.motion.yrel;
+					break;
+			}
+		}
 
-        // DRAWING ENDS HERE
+		ac_game_frame(frameTime, &curInput);
+		prevInput = curInput;
+	} // end main loop
 
-        // finally, update the screen :)
-        SDL_Flip(screen);
-    } // end main loop
+	// shut all subsystems down
+	ac_renderer_shutdown();
+	ac_game_shutdown();
 
-    // free loaded bitmap
-    SDL_FreeSurface(bmp);
-
-    // all is well ;)
-    printf("Exited cleanly\n");
-    return 0;
+	return 0;
 }
