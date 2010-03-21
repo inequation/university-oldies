@@ -36,6 +36,11 @@
 		<Linker>
 			<Add library="SDL" />
 		</Linker>
+		<Unit filename="ac130.h" />
+		<Unit filename="ac_math.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="ac_math.h" />
 		<Unit filename="generator.c">
 			<Option compilerVar="CC" />
 		</Unit>

@@ -26,6 +26,10 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 
+	// hide mouse cursor and grab input
+	/*SDL_ShowCursor(0);
+	SDL_WM_GrabInput(SDL_GRAB_ON);*/
+
 	// initialize tick counter
 	prevTime = SDL_GetTicks();
 
@@ -38,6 +42,9 @@ int main (int argc, char *argv[]) {
 
 	// initialize game logic
 	ac_game_init();
+
+	// update window caption to say that we're done generating stuff
+	SDL_WM_SetCaption("AC-130", "AC-130");
 
 	// program main loop
 	done = false;
@@ -84,6 +91,10 @@ int main (int argc, char *argv[]) {
 		ac_game_frame(frameTime, &curInput);
 		prevInput = curInput;
 	} // end main loop
+
+	// show mouse cursor and release input
+	SDL_ShowCursor(1);
+	SDL_WM_GrabInput(SDL_GRAB_OFF);
 
 	// shut all subsystems down
 	ac_renderer_shutdown();

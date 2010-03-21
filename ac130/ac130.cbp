@@ -39,8 +39,10 @@
 			<Add library="GL" />
 		</Linker>
 		<Unit filename="ac130.h" />
+		<Unit filename="ac_math.c">
+			<Option compilerVar="CC" />
+		</Unit>
 		<Unit filename="ac_math.h" />
-		<Unit filename="ac_math_sse.h" />
 		<Unit filename="game.c">
 			<Option compilerVar="CC" />
 		</Unit>
