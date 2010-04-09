@@ -29,7 +29,7 @@ extern ac_vec4_t			__ac_tmpvec;
 #define ac_vec_tosse(a, b)			ac_vec_set((b),							\
 										(a)[0], (a)[1], (a)[2], (a)[3])
 /// a = [x, y, z, w]
-#define ac_vec_set(a, x, y, z, w)	(a).sse = _mm_set_ps((x), (y), (z), (w))
+#define ac_vec_set(a, x, y, z, w)	(a).sse = _mm_set_ps((w), (z), (y), (x))
 /// a = [b, b, b, b]
 #define ac_vec_setall(a, b)			(a).sse = _mm_set1_ps((b))
 /// c = a + b

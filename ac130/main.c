@@ -13,6 +13,8 @@ int main (int argc, char *argv[]) {
 	ac_input_t	prevInput;
 	ac_input_t	curInput;
 	bool		done;
+	uint		frameCount = 0;
+	uint		frameCountTime;
 
 	// initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
@@ -26,12 +28,8 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 
-	// hide mouse cursor and grab input
-	/*SDL_ShowCursor(0);
-	SDL_WM_GrabInput(SDL_GRAB_ON);*/
-
 	// initialize tick counter
-	prevTime = SDL_GetTicks();
+	frameCountTime = prevTime = SDL_GetTicks();
 
 	// make sure SDL cleans up before exit
 	atexit(SDL_Quit);
@@ -45,6 +43,11 @@ int main (int argc, char *argv[]) {
 
 	// update window caption to say that we're done generating stuff
 	SDL_WM_SetCaption("AC-130", "AC-130");
+	// hide mouse cursor and grab input
+	//SDL_ShowCursor(0);
+	//SDL_WM_GrabInput(SDL_GRAB_ON);
+
+	memset(&prevInput, 0, sizeof(prevInput));
 
 	// program main loop
 	done = false;
@@ -54,7 +57,6 @@ int main (int argc, char *argv[]) {
 		prevTime = curTime;
 
 		memset(&curInput, 0, sizeof(curInput));
-		memset(&prevInput, 0, sizeof(prevInput));
 		// copy buttons from last frame in case there was no MOUSEBUTTONUP event
 		curInput.flags |= prevInput.flags
 			& (INPUT_MOUSE_LEFT | INPUT_MOUSE_RIGHT);
@@ -88,8 +90,18 @@ int main (int argc, char *argv[]) {
 			}
 		}
 
-		ac_game_frame(frameTime, &curInput);
+		// show fps
+		if (curTime - frameCountTime >= 5000) {
+			printf("%.2f FPS\n",
+					(float)frameCount
+						/ ((float)(curTime - frameCountTime) * 0.001));
+			frameCountTime = curTime;
+			frameCount = 0;
+		}
+
+		ac_game_frame(curTime, frameTime, &curInput);
 		prevInput = curInput;
+		frameCount++;
 	} // end main loop
 
 	// show mouse cursor and release input

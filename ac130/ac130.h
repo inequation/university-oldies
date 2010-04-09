@@ -105,7 +105,7 @@ void ac_renderer_composite(bool negative);
 // Content generator interface
 // =========================================================
 
-#define HEIGHTMAP_SIZE		64
+#define HEIGHTMAP_SIZE		128
 
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it
@@ -160,8 +160,9 @@ bool ac_game_init(void);
 void ac_game_shutdown(void);
 
 /// Advances the game world by one frame.
-/// \param frameTime time elapsed since last frame in seconds
-/// \param input current state of player input
-void ac_game_frame(float frameTime, ac_input_t *input);
+/// \param ticks		number of ticks (milliseconds) since the start of game
+/// \param frameTime	time elapsed since last frame in seconds
+/// \param input		current state of player input
+void ac_game_frame(int ticks, float frameTime, ac_input_t *input);
 
 #endif // AC130_H

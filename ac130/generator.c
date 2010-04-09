@@ -137,8 +137,8 @@ const uchar *ac_gen_terrain(int seed) {
 	float freq = 0.005 + 0.000001 * (float)((ac_gen_rand() % 6000) - 3000);
 
 	g_seed = seed;
-	xoff = ac_gen_rand() % (HEIGHTMAP_SIZE * 2);
-	yoff = ac_gen_rand() % (HEIGHTMAP_SIZE * 2);
+	xoff = ac_gen_rand() % (HEIGHTMAP_SIZE);
+	yoff = ac_gen_rand() % (HEIGHTMAP_SIZE);
 
 	memset(g_heightmap, 127, sizeof(g_heightmap));
 
@@ -154,10 +154,10 @@ const uchar *ac_gen_terrain(int seed) {
 					(float)(y + yoff) * freq,
 					sqrtf((x + xoff) * (y + yoff)) * freq));
 #endif
-#if 1
+#if 0
 			// pass 2 - detail
-			freq *= 10.0;
-			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(16.f
+			freq *= 1.0002;
+			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(8.f
 				* ac_gen_perlin(
 					(float)(x + xoff) * freq,
 					(float)(y + yoff) * freq,

@@ -7,6 +7,7 @@
 #include <GL/glew.h>
 #define NO_SDL_GLEXT	// GLEW takes care of extensions
 #include <SDL/SDL_opengl.h>
+#include <GL/glu.h>
 
 // convenience define for a GL 4x4 matrix
 typedef GLfloat	GLmatrix_t[16];
@@ -79,7 +80,7 @@ void ac_renderer_calc_terrain_lodlevels(void) {
 inline float ac_renderer_sample_height(float s, float t) {
 	return (float)g_heightmap[(int)(roundf(s * (float)HEIGHTMAP_SIZE))
 								* HEIGHTMAP_SIZE
-							+ (int)(roundf(t * (float)HEIGHTMAP_SIZE))];
+							+ (int)(roundf(t * (float)HEIGHTMAP_SIZE))] * 0.2f;
 }
 
 void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
@@ -200,14 +201,81 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 	}
 }
 
+void ac_renderer_terrain_bruteforce(void) {
+	int x, y, k;
+	ac_vec4_t v;
+	float c;
+
+	glBegin(GL_TRIANGLE_STRIP);
+	for (y = 0; y < HEIGHTMAP_SIZE - 1; y++) {
+		for (x = 0; x < HEIGHTMAP_SIZE - 1; x++) {
+			k = y * HEIGHTMAP_SIZE + x;
+			c = (float)g_heightmap[k] / 255.f;
+			glColor3f(c, c, c);
+			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
+			k = (y + 1) * HEIGHTMAP_SIZE + x;
+			c = (float)g_heightmap[k] / 255.f;
+			glColor3f(c, c, c);
+			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
+			k = y * HEIGHTMAP_SIZE + x + 1;
+			c = (float)g_heightmap[k] / 255.f;
+			glColor3f(c, c, c);
+			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
+			k = (y + 1) * HEIGHTMAP_SIZE + x + 1;
+			c = (float)g_heightmap[k] / 255.f;
+			glColor3f(c, c, c);
+			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
+		}
+		// degenerate triangle
+		glColor3f(c, 0, 0);
+		glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
+		k = (y + 1) * HEIGHTMAP_SIZE;
+		c = (float)g_heightmap[k] / 255.f;
+		glColor3f(0, 0, c);
+		glVertex3f((float)(0 - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
+	}
+	glEnd();
+}
+
 void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPushMatrix();
+
+#if 0
 	// apply our model view matrix
 	glMultMatrixf(g_ter_matrix);
 
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 
 	ac_renderer_recurse_terrain(cam, 0.f, 0.f, 1.f, 1.f, g_ter_maxLevels, 1.f);
+#else
+	//glLoadIdentity();
+	glPushMatrix();
+	glTranslatef(20, 20, 0);
+	glBegin(GL_TRIANGLES);
+	glColor3f(1, 0, 0);
+	glVertex3f(10, 0, 0);
+	glColor3f(0, 1, 0);
+	glVertex3f(0, 10, 0);
+	glColor3f(0, 0, 1);
+	glVertex3f(0, 0, 10);
+	glEnd();
+	glPopMatrix();
+
+	glPushMatrix();
+	glBegin(GL_QUADS);
+	glColor3f(1, 0, 0);
+	glVertex3f(-3, 9, -10);
+	glColor3f(0, 1, 0);
+	glVertex3f(-1, 9, -10);
+	glColor3f(0, 0, 1);
+	glVertex3f(-1, 11, -10);
+	glColor3f(1, 1, 1);
+	glVertex3f(-3, 11, -10);
+	glEnd();
+	glPopMatrix();
+
+	ac_renderer_terrain_bruteforce();
+#endif
 	glPopMatrix();
 }
 
@@ -238,7 +306,6 @@ bool ac_renderer_init(void) {
 
 	// all geometry uses vertex and index arrays
 	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_INDEX_ARRAY);
 	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
 	// initialize matrices
 	glMatrixMode(GL_MODELVIEW);
@@ -301,9 +368,11 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	x = zNear * tan(vp->fov);
 	y = zNear * tan(vp->fov * 0.75);
 	glFrustum(-x, x, -y, y, zNear, zFar);
+	//gluPerspective(vp->fov / M_PI * 180.f, 1.33f, zNear, zFar);
 
 	// restore modelview matrix mode
 	glMatrixMode(GL_MODELVIEW);
+#if 0
 	// calculate rotation matrix
 	sy = sinf(vp->angles[0]);
 	cy = cosf(vp->angles[0]);
@@ -324,6 +393,7 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	/*m[0]	= m[9] * m[6] - m[10] * m[5];
 	m[1]	= m[10] * m[4] - m[8] * m[6];
 	m[2]	= m[8] * m[5] - m[9] * m[4];*/
+
 	// now set the camera position
 	for (i = 0; i < 3; i++) {
 		ac_vec_tosse(&m[4 * i], tmp);
@@ -331,6 +401,18 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	}
 	m[15]	= 1.f;
 	glLoadMatrixf(m);
+#else
+	glLoadIdentity();
+	/*ac_vec_set(tmp, -cp * sy, sp, cp * cy, 0.f);
+	ac_vec_add(tmp, vp->origin, tmp);
+	gluLookAt(vp->origin.f[0], vp->origin.f[1], vp->origin.f[2],
+			vp->origin.f[0] - cp * sy, vp->origin.f[1] + sp, vp->origin.f[2] + cp * cy,
+			-sp * sy, cp, -sp * cy);*/
+	glRotatef(-vp->angles[1] / M_PI * 180.f, 1, 0, 0);
+	glRotatef(-vp->angles[0] / M_PI * 180.f, 0, 1, 0);
+	glTranslatef(-vp->origin.f[0], -vp->origin.f[1], -vp->origin.f[2]);
+	//glLoadIdentity();
+#endif
 
 	// draw terrain
 	ac_renderer_draw_terrain(vp->origin);
