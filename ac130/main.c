@@ -107,9 +107,10 @@ int main (int argc, char *argv[]) {
 
 		// show fps
 		if (curTime - frameCountTime >= 2000) {
-			float scale = 1.f / ((float)(curTime - frameCountTime) * 0.001);
-			printf("%.0f FPS (%.0f tris, %.0f verts)\n",
-					(float)frameCount * scale,
+			float scale = 1.f / (float)frameCount;
+			printf("%.0f FPS (%.0f tris/%.0f verts per frame)\n",
+					(float)frameCount
+						/ ((float)(curTime - frameCountTime) * 0.001),
 					(float)triCount * scale,
 					(float)vertCount * scale);
 			frameCountTime = curTime;
