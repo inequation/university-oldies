@@ -58,8 +58,10 @@ typedef struct {
 } ac_vertex_t;
 
 /// Initializes the renderer.
+/// \param vcounter		vertex counter address (for performance measurement)
+/// \param tcounter		triangle counter address (for performance measurement)
 /// \return				true on success
-bool ac_renderer_init(void);
+bool ac_renderer_init(uint *vcounter, uint *tcounter);
 
 /// Shuts the renderer down.
 void ac_renderer_shutdown(void);

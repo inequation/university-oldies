@@ -20,6 +20,8 @@ GLuint		g_hmapTex;
 ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
+uint		*g_triCounter;
+uint		*g_vertCounter;
 
 void ac_renderer_set_frustum(ac_vec4_t fwd, ac_vec4_t up, float x, float y,
 							float zNear, float zFar) {
@@ -30,7 +32,7 @@ bool ac_renderer_cull_bbox(ac_vec4_t mins, ac_vec4_t maxs) {
 	return false;
 }
 
-void ac_renderer_create_terrain_indices(void) {
+void ac_renderer_fill_terrain_indices(void) {
 	short	i, j;	// must be signed
 	ushort	*p = g_ter_indices;
 
@@ -78,6 +80,52 @@ void ac_renderer_create_terrain_indices(void) {
 	//assert(p - g_ter_indices == TERRAIN_NUM_INDICES);
 }
 
+void ac_renderer_fill_terrain_vertices(void) {
+	int i, j;
+	float s, t;
+	const float invScaleX = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
+	const float invScaleY = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
+
+	// fill patch body vertices
+	ac_vertex_t *v = g_ter_verts;
+	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
+		t = i * invScaleY;
+		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
+			s = j * invScaleX;
+			v->st[0] = s;
+			v->st[1] = t;
+			v->pos = ac_vec_set(s, 0.f, t, 0.f);
+			v++;
+		}
+	}
+
+	// fill skirt vertices
+	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
+		s = j * invScaleX;
+		v->st[0] = s;
+		v->st[1] = 0.f;
+		v->pos = ac_vec_set(s, -10.f, 0.f, 0.f);
+		v++;
+		v->st[0] = s;
+		v->st[1] = 1.f;
+		v->pos = ac_vec_set(s, -10.f, 1.f, 0.f);
+		v++;
+	}
+
+	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
+		t = i * invScaleY;
+		v->st[0] = 0.f;
+		v->st[1] = t;
+		v->pos = ac_vec_set(0.f, -10.f, t, 0.f);
+		v++;
+		v->st[0] = 1.f;
+		v->st[1] = t;
+		v->pos = ac_vec_set(1.f, -10.f, t, 0.f);
+		v++;
+	}
+	assert(v - g_ter_verts == TERRAIN_NUM_VERTS);
+}
+
 void ac_renderer_calc_terrain_lodlevels(void) {
 	// calculate max LOD levels
 	int i, pow2 = (HEIGHTMAP_SIZE - 1) / (TERRAIN_PATCH_SIZE - 1);
@@ -94,64 +142,6 @@ inline float ac_renderer_sample_height(float s, float t) {
 
 void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	int i, j;
-	const float invScaleX = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
-	const float invScaleY = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
-	float s, t;
-#if 0
-
-	// fill patch body vertices
-	ac_vertex_t *v = g_ter_verts;
-	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
-		t = i * invScaleY;
-		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
-			s = j * invScaleX;
-			v->st[0] = bu + s * scale;
-			v->st[1] = bv + t * scale;
-			v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
-						ac_renderer_sample_height(v->st[0], v->st[1]),
-						v->st[1] * HEIGHTMAP_SIZE,
-						0.f);
-			v++;
-		}
-	}
-
-	// fill skirt vertices
-	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
-		s = j * invScaleX;
-		v->st[0] = bu + s * scale;
-		v->st[1] = 0.f;
-		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
-						-50.f,
-						v->st[1] * HEIGHTMAP_SIZE,
-						0.f);
-		v++;
-		v->st[0] = bu + s * scale;
-		v->st[1] = 1.f;
-		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
-						-50.f,
-						v->st[1] * HEIGHTMAP_SIZE,
-						0.f);
-		v++;
-	}
-
-	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
-		t = i * invScaleY;
-		v->st[0] = 0.f;
-		v->st[1] = bu + t * scale;
-		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
-						-50.f,
-						v->st[1] * HEIGHTMAP_SIZE,
-						0.f);
-		v++;
-		v->st[0] = 1.f;
-		v->st[1] = bu + t * scale;
-		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
-						-50.f,
-						v->st[1] * HEIGHTMAP_SIZE,
-						0.f);
-		v++;
-	}
-#else
 	GLmatrix_t m = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -190,73 +180,30 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	m[0] *= HEIGHTMAP_SIZE;
 	m[5] = HEIGHT_SCALE;
 	m[10] = scale * HEIGHTMAP_SIZE;
-	m[12] = bu;//HEIGHTMAP_SIZE * (bu + 0.5);
+	m[12] = bu * HEIGHTMAP_SIZE;
 	m[13] = 0;
-	m[14] = bv;//HEIGHTMAP_SIZE * (bv + 0.5);
+	m[14] = bv * HEIGHTMAP_SIZE;
 	glMultMatrixf(m);
 
-	// fill patch body vertices
+	// sample the heightmap and set vertex Y component
 	ac_vertex_t *v = g_ter_verts;
 	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
-		t = i * invScaleY;
-		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
-			s = j * invScaleX;
-			v->st[0] = s;
-			v->st[1] = t;
-			v->pos = ac_vec_set(s,
-						ac_renderer_sample_height(bu + s * scale, bv + t * scale),
-						t,
-						0.f);
-			v++;
-		}
+		for (j = 0; j < TERRAIN_PATCH_SIZE; j++, v++)
+			v->pos.f[1] = ac_renderer_sample_height(bu + v->st[0] * scale,
+													bv + v->st[1] * scale);
 	}
-
-	// fill skirt vertices
-	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
-		s = j * invScaleX;
-		v->st[0] = s;
-		v->st[1] = 0.f;
-		v->pos = ac_vec_set(bu + s * scale,
-						-50.f,
-						0.f,
-						0.f);
-		v++;
-		v->st[0] = s;
-		v->st[1] = 1.f;
-		v->pos = ac_vec_set(bu + s * scale,
-						-50.f,
-						HEIGHTMAP_SIZE,
-						0.f);
-		v++;
-	}
-
-	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
-		t = i * invScaleY;
-		v->st[0] = 0.f;
-		v->st[1] = t;
-		v->pos = ac_vec_set(0.f,
-						-50.f,
-						bu + t * scale,
-						0.f);
-		v++;
-		v->st[0] = 1.f;
-		v->st[1] = t;
-		v->pos = ac_vec_set(HEIGHTMAP_SIZE,
-						-50.f,
-						bu + t * scale,
-						0.f);
-		v++;
-	}
-#endif
 
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].pos.f[0]);
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].st[0]);
 	glDrawElements(GL_TRIANGLE_STRIP,
-					TERRAIN_NUM_BODY_INDICES,
+					TERRAIN_NUM_INDICES,
 					GL_UNSIGNED_SHORT,
 					&g_ter_indices[0]);
+	*g_vertCounter += TERRAIN_NUM_VERTS;
+	*g_triCounter += (TERRAIN_PATCH_SIZE - 1) * (TERRAIN_PATCH_SIZE - 1)
+		+ 4 * 2 * (TERRAIN_PATCH_SIZE - 1);
 
 	// pop both matrices
 	glMatrixMode(GL_TEXTURE);
@@ -382,7 +329,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	// traverse the quadtree
 	ac_renderer_recurse_terrain(cam,
 								0.f, 0.f, 1.f, 1.f,
-								/*g_ter_maxLevels*/0, 1.f);
+								g_ter_maxLevels, 1.f);
 #else
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
@@ -391,7 +338,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPopMatrix();
 }
 
-bool ac_renderer_init(void) {
+bool ac_renderer_init(uint *vcounter, uint *tcounter) {
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
@@ -405,6 +352,12 @@ bool ac_renderer_init(void) {
 		fprintf(stderr, "SDL_SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
+
+	if (!vcounter || !tcounter)
+		return false;
+
+	g_vertCounter = vcounter;
+	g_triCounter = tcounter;
 
 	SDL_WM_SetCaption("AC-130", "AC-130");
 
@@ -429,7 +382,8 @@ bool ac_renderer_init(void) {
 	glEnable(GL_DEPTH_TEST);
 
 	// generate resources
-	ac_renderer_create_terrain_indices();
+	ac_renderer_fill_terrain_indices();
+	ac_renderer_fill_terrain_vertices();
 	ac_renderer_calc_terrain_lodlevels();
 
 	return true;

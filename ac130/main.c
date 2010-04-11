@@ -14,6 +14,8 @@ int main (int argc, char *argv[]) {
 	ac_input_t	curInput;
 	bool		done;
 	uint		frameCount = 0;
+	uint		vertCount = 0;
+	uint		triCount = 0;
 	uint		frameCountTime;
 
 	// initialize SDL
@@ -23,7 +25,7 @@ int main (int argc, char *argv[]) {
 	}
 
 	// initialize renderer
-	if (!ac_renderer_init()) {
+	if (!ac_renderer_init(&vertCount, &triCount)) {
 		fprintf(stderr, "Unable to init renderer\n");
 		return 1;
 	}
@@ -104,12 +106,14 @@ int main (int argc, char *argv[]) {
 		}
 
 		// show fps
-		if (curTime - frameCountTime >= 5000) {
-			printf("%.2f FPS\n",
-					(float)frameCount
-						/ ((float)(curTime - frameCountTime) * 0.001));
+		if (curTime - frameCountTime >= 2000) {
+			float scale = 1.f / ((float)(curTime - frameCountTime) * 0.001);
+			printf("%.0f FPS (%.0f tris, %.0f verts)\n",
+					(float)frameCount * scale,
+					(float)triCount * scale,
+					(float)vertCount * scale);
 			frameCountTime = curTime;
-			frameCount = 0;
+			frameCount = triCount = vertCount = 0;
 		}
 
 		ac_game_frame(curTime, frameTime, &curInput);
