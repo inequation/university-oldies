@@ -202,8 +202,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 					GL_UNSIGNED_SHORT,
 					&g_ter_indices[0]);
 	*g_vertCounter += TERRAIN_NUM_VERTS;
-	*g_triCounter += (TERRAIN_PATCH_SIZE - 1) * (TERRAIN_PATCH_SIZE - 1)
-		+ 4 * 2 * (TERRAIN_PATCH_SIZE - 1);
+	*g_triCounter += TERRAIN_NUM_INDICES - 2;
 
 	// pop both matrices
 	glMatrixMode(GL_TEXTURE);
@@ -260,48 +259,6 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 	}
 }
 
-void ac_renderer_terrain_bruteforce(void) {
-	int x, y, k;
-	float c;
-
-	glBegin(GL_TRIANGLE_STRIP);
-	glColor3f(1, 1, 1);
-	for (y = 0; y < HEIGHTMAP_SIZE - 1; y++) {
-		for (x = 0; x < HEIGHTMAP_SIZE - 1; x++) {
-			k = y * HEIGHTMAP_SIZE + x;
-			c = ((float)g_heightmap[k]) / 255.f;
-			//glColor3f(c, c, c);
-			glTexCoord2f(((float)x + 0.5) / (float)HEIGHTMAP_SIZE, ((float)y + 0.5) / (float)HEIGHTMAP_SIZE);
-			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
-			k = (y + 1) * HEIGHTMAP_SIZE + x;
-			c = ((float)g_heightmap[k]) / 255.f;
-			//glColor3f(c, c, c);
-			glTexCoord2f(((float)x + 0.5) / (float)HEIGHTMAP_SIZE, ((float)y + 1.5) / (float)HEIGHTMAP_SIZE);
-			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
-			k = y * HEIGHTMAP_SIZE + x + 1;
-			c = ((float)g_heightmap[k]) / 255.f;
-			//glColor3f(c, c, c);
-			glTexCoord2f(((float)x + 1.5) / (float)HEIGHTMAP_SIZE, ((float)y + 0.5) / (float)HEIGHTMAP_SIZE);
-			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
-			k = (y + 1) * HEIGHTMAP_SIZE + x + 1;
-			c = ((float)g_heightmap[k]) / 255.f;
-			//glColor3f(c, c, c);
-			glTexCoord2f(((float)x + 1.5) / (float)HEIGHTMAP_SIZE, ((float)y + 1.5) / (float)HEIGHTMAP_SIZE);
-			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
-		}
-		// degenerate triangle
-		//glColor3f(c, 0, 0);
-		//glTexCoord2f(0, 0);
-		glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
-		k = (y + 1) * HEIGHTMAP_SIZE;
-		c = ((float)g_heightmap[k]) / 255.f;
-		//glColor3f(0, 0, c);
-		//glTexCoord2f(0, 0);
-		glVertex3f((float)(0 - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
-	}
-	glEnd();
-}
-
 void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPushMatrix();
 
@@ -319,7 +276,6 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPopMatrix();
 	glColor3f(1, 1, 1);
 
-#if 1
 	// centre the terrain
 	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
 
@@ -330,11 +286,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	ac_renderer_recurse_terrain(cam,
 								0.f, 0.f, 1.f, 1.f,
 								g_ter_maxLevels, 1.f);
-#else
-	glEnable(GL_TEXTURE_2D);
-	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
-	ac_renderer_terrain_bruteforce();
-#endif
+
 	glPopMatrix();
 }
 
