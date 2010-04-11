@@ -9,7 +9,6 @@
 // some includes shared by all the modules
 #include <stdlib.h>
 #include <stdbool.h>
-#include <math.h>
 #include <SDL/SDL.h>
 #include <assert.h>
 

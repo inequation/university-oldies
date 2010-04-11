@@ -21,7 +21,9 @@ ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
 
-void ac_renderer_set_frustum() {
+void ac_renderer_set_frustum(ac_vec4_t fwd, ac_vec4_t up, float x, float y,
+							float zNear, float zFar) {
+
 }
 
 bool ac_renderer_cull_bbox(ac_vec4_t mins, ac_vec4_t maxs) {
@@ -104,8 +106,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 			s = j * invScaleX;
 			v->st[0] = bu + s * scale;
 			v->st[1] = bv + t * scale;
-			ac_vec_set(v->pos,
-						v->st[0] * HEIGHTMAP_SIZE,
+			v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
 						ac_renderer_sample_height(v->st[0], v->st[1]),
 						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
@@ -118,16 +119,14 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 		s = j * invScaleX;
 		v->st[0] = bu + s * scale;
 		v->st[1] = 0.f;
-		ac_vec_set(v->pos,
-						v->st[0] * HEIGHTMAP_SIZE,
+		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
 						-50.f,
 						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
 		v++;
 		v->st[0] = bu + s * scale;
 		v->st[1] = 1.f;
-		ac_vec_set(v->pos,
-						v->st[0] * HEIGHTMAP_SIZE,
+		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
 						-50.f,
 						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
@@ -138,16 +137,14 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 		t = i * invScaleY;
 		v->st[0] = 0.f;
 		v->st[1] = bu + t * scale;
-		ac_vec_set(v->pos,
-						v->st[0] * HEIGHTMAP_SIZE,
+		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
 						-50.f,
 						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
 		v++;
 		v->st[0] = 1.f;
 		v->st[1] = bu + t * scale;
-		ac_vec_set(v->pos,
-						v->st[0] * HEIGHTMAP_SIZE,
+		v->pos = ac_vec_set(v->st[0] * HEIGHTMAP_SIZE,
 						-50.f,
 						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
@@ -173,11 +170,11 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 	float halfV = (minV + maxV) * 0.5;
 
 	// apply frustum culling
-	ac_vec_set(mins, (minU - 0.5) * HEIGHTMAP_SIZE,
+	mins = ac_vec_set((minU - 0.5) * HEIGHTMAP_SIZE,
 					-10.f,
 					(minV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
-	ac_vec_set(maxs, (maxU - 0.5) * HEIGHTMAP_SIZE,
+	maxs = ac_vec_set((maxU - 0.5) * HEIGHTMAP_SIZE,
 					50.f,
 					(maxV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
@@ -188,12 +185,11 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 				/ (TERRAIN_PATCH_SIZE_F - 1.f);
 	d2 *= d2;
 
-	ac_vec_set(v,
-				(halfU - 0.5) * (float)HEIGHTMAP_SIZE,
+	v = ac_vec_set((halfU - 0.5) * (float)HEIGHTMAP_SIZE,
 				128.f,
 				(halfV - 0.5) * (float)HEIGHTMAP_SIZE,
 				0.f);
-	ac_vec_sub(v, cam, v);
+	v = ac_vec_sub(v, cam);
 
 	// use distances squared
 	float f2 = ac_vec_dot(v, v) / d2;
@@ -215,7 +211,6 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 
 void ac_renderer_terrain_bruteforce(void) {
 	int x, y, k;
-	ac_vec4_t v;
 	float c;
 
 	glBegin(GL_TRIANGLE_STRIP);
@@ -314,14 +309,12 @@ bool ac_renderer_init(void) {
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
-	// set window caption to say that we're working
-	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
-					"AC-130");
-
 	if (!(g_screen = SDL_SetVideoMode(1024, 768, 24, SDL_OPENGL))) {
 		fprintf(stderr, "SDL_SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
+
+	SDL_WM_SetCaption("AC-130", "AC-130");
 
 	// initialize the extension wrangler
 	glewInit();
@@ -382,13 +375,47 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	};
 	double zNear = 0.1, zFar = 600.0;
 	double x, y;
-	float sy, cy, sp, cp;
-	ac_vec4_t tmp;
-	int i;
+	float cy, cp, sy, sp;
+	ac_vec4_t fwd, up;
 
 	// clear buffers
 	//glClearColor(0.f, 0.75f, 1.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// set camera matrix
+	glMatrixMode(GL_MODELVIEW);
+
+	cy = cosf(vp->angles[0]);
+	sy = sinf(vp->angles[0]);
+	cp = cosf(vp->angles[1]);
+	sp = sinf(vp->angles[1]);
+	// column 1
+	m[0] = cy;
+	m[1] = sp * sy;
+	m[2] = cp * sy;
+	m[3] = 0;
+	// column 2
+	m[4] = 0;
+	m[5] = cp;
+	m[6] = -sp;
+	m[7] = 0;
+	// column 3
+	m[8] = -sy;
+	m[9] = sp * cy;
+	m[10] = cp * cy;
+	m[11] = 0;
+	// column 4
+	m[12] = /*-vp->origin.f[0] * m[0]
+		- vp->origin.f[1] * m[4]
+		- vp->origin.f[2] * m[8]*/0;
+	m[13] = /*-vp->origin.f[0] * m[1]
+		- vp->origin.f[1] * m[5]
+		- vp->origin.f[2] * m[9]*/0;
+	m[14] = /*-vp->origin.f[0] * m[2]
+		- vp->origin.f[1] * m[6]
+		- vp->origin.f[2] * m[10]*/0;
+	m[15] = 1;
+	glLoadMatrixf(m);
 
 	// set up the GL projection matrix
 	glMatrixMode(GL_PROJECTION);
@@ -396,51 +423,10 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	x = zNear * tan(vp->fov);
 	y = zNear * tan(vp->fov * 0.75);
 	glFrustum(-x, x, -y, y, zNear, zFar);
-	ac_renderer_set_frustum();
-
-	// restore modelview matrix mode
-	glMatrixMode(GL_MODELVIEW);
-#if 0
-	// calculate rotation matrix
-	sy = sinf(vp->angles[0]);
-	cy = cosf(vp->angles[0]);
-	sp = sinf(vp->angles[1]);
-	cp = cosf(vp->angles[1]);
-	// forward vector
-	m[8]	= -cp * sy;
-	m[9]	= sp;
-	m[10]	= cp * cy;
-	// up vector
-	m[4]	= -sp * sy;
-	m[5]	= cp;
-	m[6]	= -sp * cy;
-	// right vector
-	m[0]	= cy;
-	m[1]	= 0.f;
-	m[2]	= -sy;
-	/*m[0]	= m[9] * m[6] - m[10] * m[5];
-	m[1]	= m[10] * m[4] - m[8] * m[6];
-	m[2]	= m[8] * m[5] - m[9] * m[4];*/
-
-	// now set the camera position
-	for (i = 0; i < 3; i++) {
-		ac_vec_tosse(&m[4 * i], tmp);
-		m[12 + i] = ac_vec_dot(vp->origin, tmp);
-	}
-	m[15]	= 1.f;
-	glLoadMatrixf(m);
-#else
-	glLoadIdentity();
-	/*ac_vec_set(tmp, -cp * sy, sp, cp * cy, 0.f);
-	ac_vec_add(tmp, vp->origin, tmp);
-	gluLookAt(vp->origin.f[0], vp->origin.f[1], vp->origin.f[2],
-			vp->origin.f[0] - cp * sy, vp->origin.f[1] + sp, vp->origin.f[2] + cp * cy,
-			-sp * sy, cp, -sp * cy);*/
-	glRotatef(-vp->angles[1] / M_PI * 180.f, 1, 0, 0);
-	glRotatef(-vp->angles[0] / M_PI * 180.f, 0, 1, 0);
-	glTranslatef(-vp->origin.f[0], -vp->origin.f[1], -vp->origin.f[2]);
-	//glLoadIdentity();
-#endif
+	// calculate frustum planes
+	fwd = ac_vec_set(-m[2], -m[6], -m[10], 0);
+	up = ac_vec_set(m[1], m[5], m[9], 0);
+	ac_renderer_set_frustum(fwd, up, x, y, zNear, zFar);
 
 	// draw terrain
 	ac_renderer_draw_terrain(vp->origin);

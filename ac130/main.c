@@ -28,6 +28,10 @@ int main (int argc, char *argv[]) {
 		return 1;
 	}
 
+	// set window caption to say that we're working
+	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
+					"AC-130");
+
 	// initialize tick counter
 	frameCountTime = prevTime = SDL_GetTicks();
 
