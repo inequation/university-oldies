@@ -17,7 +17,7 @@ bool ac_game_init(void) {
 void ac_game_shutdown(void) {
 }
 
-#define FLOATING_RADIUS		200.f
+#define FLOATING_RADIUS		300.f
 #define TIME_SCALE			0.09
 #define MOUSE_SCALE			0.0015
 void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
@@ -33,7 +33,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	vp.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE
 		+ frameTime * TIME_SCALE;	// keep the cam in sync with the plane
 	vp.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE;
-#if 1
+#if 0
 	if (vp.angles[0] < -plane_angle + M_PI * 0.2)
 		vp.angles[0] = -plane_angle + M_PI * 0.2;
 	else if (vp.angles[0] > -plane_angle + M_PI * 0.8)

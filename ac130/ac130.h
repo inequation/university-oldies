@@ -105,6 +105,7 @@ void ac_renderer_composite(bool negative);
 // =========================================================
 
 #define HEIGHTMAP_SIZE		512
+#define HEIGHT_SCALE		(50.f / 255.f)
 
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it

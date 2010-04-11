@@ -89,7 +89,7 @@ void ac_renderer_calc_terrain_lodlevels(void) {
 inline float ac_renderer_sample_height(float s, float t) {
 	int x = roundf(s * (HEIGHTMAP_SIZE - 1));
 	int y = roundf(t * (HEIGHTMAP_SIZE - 1));
-	return 50.f * (float)g_heightmap[y * HEIGHTMAP_SIZE + x] / 255.f;
+	return (float)g_heightmap[y * HEIGHTMAP_SIZE + x];
 }
 
 void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
@@ -97,6 +97,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	const float invScaleX = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
 	const float invScaleY = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
 	float s, t;
+#if 0
 
 	// fill patch body vertices
 	ac_vertex_t *v = g_ter_verts;
@@ -150,15 +151,118 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 						0.f);
 		v++;
 	}
+#else
+	GLmatrix_t m = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	};
+
+	// create the texture matrix for the patch...
+	glMatrixMode(GL_TEXTURE);
+	glPushMatrix();
+	// column 1
+	m[0] = scale;
+	//m[1] = 0;
+	//m[2] = 0;
+	//m[3] = 0;
+	// column 2
+	//m[4] = 0;
+	m[5] = scale;
+	//m[6] = 0;
+	//m[7] = 0;
+	// column 3
+	//m[8] = 0;
+	//m[9] = 0;
+	//m[10] = 1;
+	//m[11] = 0;
+	// column 4
+	m[12] = bu;
+	m[13] = bv;
+	//m[14] = 0;
+	//m[15] = 1;
+	glLoadMatrixf(m);
+	// ...and the modelview one
+	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
+	// only make the necessary changes
+	m[0] *= HEIGHTMAP_SIZE;
+	m[5] = HEIGHT_SCALE;
+	m[10] = scale * HEIGHTMAP_SIZE;
+	m[12] = bu;//HEIGHTMAP_SIZE * (bu + 0.5);
+	m[13] = 0;
+	m[14] = bv;//HEIGHTMAP_SIZE * (bv + 0.5);
+	glMultMatrixf(m);
+
+	// fill patch body vertices
+	ac_vertex_t *v = g_ter_verts;
+	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
+		t = i * invScaleY;
+		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
+			s = j * invScaleX;
+			v->st[0] = s;
+			v->st[1] = t;
+			v->pos = ac_vec_set(s,
+						ac_renderer_sample_height(bu + s * scale, bv + t * scale),
+						t,
+						0.f);
+			v++;
+		}
+	}
+
+	// fill skirt vertices
+	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
+		s = j * invScaleX;
+		v->st[0] = s;
+		v->st[1] = 0.f;
+		v->pos = ac_vec_set(bu + s * scale,
+						-50.f,
+						0.f,
+						0.f);
+		v++;
+		v->st[0] = s;
+		v->st[1] = 1.f;
+		v->pos = ac_vec_set(bu + s * scale,
+						-50.f,
+						HEIGHTMAP_SIZE,
+						0.f);
+		v++;
+	}
+
+	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
+		t = i * invScaleY;
+		v->st[0] = 0.f;
+		v->st[1] = t;
+		v->pos = ac_vec_set(0.f,
+						-50.f,
+						bu + t * scale,
+						0.f);
+		v++;
+		v->st[0] = 1.f;
+		v->st[1] = t;
+		v->pos = ac_vec_set(HEIGHTMAP_SIZE,
+						-50.f,
+						bu + t * scale,
+						0.f);
+		v++;
+	}
+#endif
 
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].pos.f[0]);
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].st[0]);
 	glDrawElements(GL_TRIANGLE_STRIP,
-					TERRAIN_NUM_INDICES,
+					TERRAIN_NUM_BODY_INDICES,
 					GL_UNSIGNED_SHORT,
 					&g_ter_indices[0]);
+
+	// pop both matrices
+	glMatrixMode(GL_TEXTURE);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
 }
 
 void ac_renderer_recurse_terrain(ac_vec4_t cam,
@@ -254,7 +358,7 @@ void ac_renderer_terrain_bruteforce(void) {
 void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPushMatrix();
 
-	/*//glLoadIdentity();
+	//glLoadIdentity();
 	glPushMatrix();
 	//glTranslatef(20, 20, 0);
 	glBegin(GL_TRIANGLES);
@@ -266,19 +370,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glVertex3f(0, 0, 10);
 	glEnd();
 	glPopMatrix();
-
-	glPushMatrix();
-	glBegin(GL_QUADS);
-	glColor3f(1, 0, 0);
-	glVertex3f(-3, 9, -10);
-	glColor3f(0, 1, 0);
-	glVertex3f(-1, 9, -10);
-	glColor3f(0, 0, 1);
-	glVertex3f(-1, 11, -10);
 	glColor3f(1, 1, 1);
-	glVertex3f(-3, 11, -10);
-	glEnd();
-	glPopMatrix();*/
 
 #if 1
 	// centre the terrain
@@ -290,7 +382,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	// traverse the quadtree
 	ac_renderer_recurse_terrain(cam,
 								0.f, 0.f, 1.f, 1.f,
-								g_ter_maxLevels, 1.f);
+								/*g_ter_maxLevels*/0, 1.f);
 #else
 	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
@@ -331,9 +423,9 @@ bool ac_renderer_init(void) {
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	// set face culling
-	glCullFace(GL_BACK);
+	/*glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
-	glEnable(GL_CULL_FACE);
+	glEnable(GL_CULL_FACE);*/
 	glEnable(GL_DEPTH_TEST);
 
 	// generate resources
@@ -373,7 +465,7 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 		0, 0, 1, 0,	// 8
 		0, 0, 0, 1	// 12
 	};
-	double zNear = 0.1, zFar = 600.0;
+	double zNear = 0.1, zFar = 1000.0;
 	double x, y;
 	float cy, cp, sy, sp;
 	ac_vec4_t fwd, up;
@@ -381,6 +473,13 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	// clear buffers
 	//glClearColor(0.f, 0.75f, 1.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// set up the GL projection matrix
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	x = zNear * tan(vp->fov);
+	y = zNear * tan(vp->fov * 0.75);
+	glFrustum(-x, x, -y, y, zNear, zFar);
 
 	// set camera matrix
 	glMatrixMode(GL_MODELVIEW);
@@ -405,24 +504,18 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	m[10] = cp * cy;
 	m[11] = 0;
 	// column 4
-	m[12] = /*-vp->origin.f[0] * m[0]
+	m[12] = -vp->origin.f[0] * m[0]
 		- vp->origin.f[1] * m[4]
-		- vp->origin.f[2] * m[8]*/0;
-	m[13] = /*-vp->origin.f[0] * m[1]
+		- vp->origin.f[2] * m[8];
+	m[13] = -vp->origin.f[0] * m[1]
 		- vp->origin.f[1] * m[5]
-		- vp->origin.f[2] * m[9]*/0;
-	m[14] = /*-vp->origin.f[0] * m[2]
+		- vp->origin.f[2] * m[9];
+	m[14] = -vp->origin.f[0] * m[2]
 		- vp->origin.f[1] * m[6]
-		- vp->origin.f[2] * m[10]*/0;
+		- vp->origin.f[2] * m[10];
 	m[15] = 1;
 	glLoadMatrixf(m);
 
-	// set up the GL projection matrix
-	glMatrixMode(GL_PROJECTION);
-	glLoadIdentity();
-	x = zNear * tan(vp->fov);
-	y = zNear * tan(vp->fov * 0.75);
-	glFrustum(-x, x, -y, y, zNear, zFar);
 	// calculate frustum planes
 	fwd = ac_vec_set(-m[2], -m[6], -m[10], 0);
 	up = ac_vec_set(m[1], m[5], m[9], 0);
