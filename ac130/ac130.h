@@ -43,7 +43,7 @@ typedef unsigned int	uint;
 									)	// + 2 degenerate triangles
 #define TERRAIN_NUM_INDICES			(TERRAIN_NUM_BODY_INDICES				\
 										+ TERRAIN_NUM_SKIRT_INDICES)
-#define TERRAIN_LOD					100.f
+#define TERRAIN_LOD					50.f
 
 /// Viewpoint definition structure.
 typedef struct {
@@ -105,7 +105,7 @@ void ac_renderer_composite(bool negative);
 // Content generator interface
 // =========================================================
 
-#define HEIGHTMAP_SIZE		128
+#define HEIGHTMAP_SIZE		512
 
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it

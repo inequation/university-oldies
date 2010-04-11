@@ -46,6 +46,7 @@ int main (int argc, char *argv[]) {
 	// hide mouse cursor and grab input
 	//SDL_ShowCursor(0);
 	//SDL_WM_GrabInput(SDL_GRAB_ON);
+	bool grab = false;
 
 	memset(&prevInput, 0, sizeof(prevInput));
 
@@ -76,10 +77,18 @@ int main (int argc, char *argv[]) {
 					break;
 				case SDL_MOUSEBUTTONDOWN:
 				case SDL_MOUSEBUTTONUP:
-					if (event.button.state == SDL_PRESSED)
+					if (event.button.state == SDL_PRESSED) {
 						curInput.flags |= event.button.button == SDL_BUTTON_LEFT
 							? INPUT_MOUSE_LEFT : INPUT_MOUSE_RIGHT;
-					else
+						grab = !grab;
+						if (grab) {
+							SDL_WM_GrabInput(SDL_GRAB_ON);
+							SDL_ShowCursor(0);
+						} else {
+							SDL_WM_GrabInput(SDL_GRAB_OFF);
+							SDL_ShowCursor(1);
+						}
+					} else
 						curInput.flags &= event.button.button == SDL_BUTTON_LEFT
 							? ~INPUT_MOUSE_LEFT : ~INPUT_MOUSE_RIGHT;
 					break;

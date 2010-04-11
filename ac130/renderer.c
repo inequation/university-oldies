@@ -20,7 +20,13 @@ GLuint		g_hmapTex;
 ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
-GLmatrix_t	g_ter_matrix;
+
+void ac_renderer_set_frustum() {
+}
+
+bool ac_renderer_cull_bbox(ac_vec4_t mins, ac_vec4_t maxs) {
+	return false;
+}
 
 void ac_renderer_create_terrain_indices(void) {
 	short	i, j;	// must be signed
@@ -33,7 +39,8 @@ void ac_renderer_create_terrain_indices(void) {
 			*(p++) = (i + 1) * TERRAIN_PATCH_SIZE + j;
 		}
 		if (i < TERRAIN_PATCH_SIZE - 2) {	// add a degenerate triangle
-	        *(p++) = *(p - 1);
+	        *p = *(p - 1);
+	        p++;
 	        *(p++) = (i + 1) * TERRAIN_PATCH_SIZE;
 	    }
 	}
@@ -44,7 +51,7 @@ void ac_renderer_create_terrain_indices(void) {
 
 	// skirt
 	// a single strip that goes around the entire patch
-	// -Y edge
+	// -Z edge
 	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
 		*(p++) = i * 2 + TERRAIN_PATCH_SIZE * TERRAIN_PATCH_SIZE;
 		*(p++) = i;
@@ -52,21 +59,21 @@ void ac_renderer_create_terrain_indices(void) {
 	// -X edge
 	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
 		*(p++) = i * 2 + TERRAIN_PATCH_SIZE * (TERRAIN_PATCH_SIZE + 2) - 1;
-		*(p++) = i * TERRAIN_PATCH_SIZE + TERRAIN_PATCH_SIZE * 2 - 1;
+		*(p++) = i * TERRAIN_PATCH_SIZE + TERRAIN_PATCH_SIZE - 1;
 	}
-	// +Y edge
+	// +Z edge
 	for (i = TERRAIN_PATCH_SIZE - 1; i >= 0; i--) {
 		*(p++) = i * 2 + TERRAIN_PATCH_SIZE * TERRAIN_PATCH_SIZE + 1;
 		*(p++) = i + TERRAIN_PATCH_SIZE * (TERRAIN_PATCH_SIZE - 1);
 	}
 	// +X edge
 	for (i = TERRAIN_PATCH_SIZE - 2; i >= 1; i--) {
-		*(p++) = i * 2 + TERRAIN_PATCH_SIZE * (TERRAIN_PATCH_SIZE + 2);
+		*(p++) = i * 2 + TERRAIN_PATCH_SIZE * (TERRAIN_PATCH_SIZE + 2) - 2;
 		*(p++) = i * TERRAIN_PATCH_SIZE;
 	}
-	*(p++) = 0;
 	*(p++) = TERRAIN_PATCH_SIZE * TERRAIN_PATCH_SIZE;
-	assert(p - g_ter_indices == TERRAIN_NUM_INDICES);
+	*(p++) = 0;
+	//assert(p - g_ter_indices == TERRAIN_NUM_INDICES);
 }
 
 void ac_renderer_calc_terrain_lodlevels(void) {
@@ -78,9 +85,9 @@ void ac_renderer_calc_terrain_lodlevels(void) {
 }
 
 inline float ac_renderer_sample_height(float s, float t) {
-	return (float)g_heightmap[(int)(roundf(s * (float)HEIGHTMAP_SIZE))
-								* HEIGHTMAP_SIZE
-							+ (int)(roundf(t * (float)HEIGHTMAP_SIZE))] * 0.2f;
+	int x = roundf(s * (HEIGHTMAP_SIZE - 1));
+	int y = roundf(t * (HEIGHTMAP_SIZE - 1));
+	return 50.f * (float)g_heightmap[y * HEIGHTMAP_SIZE + x] / 255.f;
 }
 
 void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
@@ -89,25 +96,19 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	const float invScaleY = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
 	float s, t;
 
-	// use these temporary SSE vectors to speed up the scale and bias transform
-	ac_vec4_t svec, bias;
-	ac_vec_setall(svec, scale * (float)HEIGHTMAP_SIZE);
-	ac_vec_set(bias, bu, 0.f, bv, 0.f);
-
 	// fill patch body vertices
 	ac_vertex_t *v = g_ter_verts;
 	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
 		t = i * invScaleY;
 		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
 			s = j * invScaleX;
+			v->st[0] = bu + s * scale;
+			v->st[1] = bv + t * scale;
 			ac_vec_set(v->pos,
-						1.f - t,
-						ac_renderer_sample_height(t, s),
-						s,
+						v->st[0] * HEIGHTMAP_SIZE,
+						ac_renderer_sample_height(v->st[0], v->st[1]),
+						v->st[1] * HEIGHTMAP_SIZE,
 						0.f);
-			ac_vec_ma(v->pos, svec, bias, v->pos);
-			v->st[0] = 1.f - s;
-			v->st[1] = t;
 			v++;
 		}
 	}
@@ -115,29 +116,41 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	// fill skirt vertices
 	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
 		s = j * invScaleX;
-		ac_vec_set(v->pos, 1.f, -10.f, s, 0.f);
-		ac_vec_ma(v->pos, svec, bias, v->pos);
-		v->st[0] = 1.f - s;
-		v->st[1] = 1.f;
-		v++;
-		ac_vec_set(v->pos, 0.f, -10.f, s, 0.f);
-		ac_vec_ma(v->pos, svec, bias, v->pos);
-		v->st[0] = 1.f - s;
+		v->st[0] = bu + s * scale;
 		v->st[1] = 0.f;
+		ac_vec_set(v->pos,
+						v->st[0] * HEIGHTMAP_SIZE,
+						-50.f,
+						v->st[1] * HEIGHTMAP_SIZE,
+						0.f);
+		v++;
+		v->st[0] = bu + s * scale;
+		v->st[1] = 1.f;
+		ac_vec_set(v->pos,
+						v->st[0] * HEIGHTMAP_SIZE,
+						-50.f,
+						v->st[1] * HEIGHTMAP_SIZE,
+						0.f);
 		v++;
 	}
 
 	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
 		t = i * invScaleY;
-		ac_vec_set(v->pos, 1.f - t, -10.f, 1.f, 0.f);
-		ac_vec_ma(v->pos, svec, bias, v->pos);
-		v->st[0] = 1.f;
-		v->st[1] = t;
-		v++;
-		ac_vec_set(v->pos, 1.f - t, -10.f, 0.f, 0.f);
-		ac_vec_ma(v->pos, svec, bias, v->pos);
 		v->st[0] = 0.f;
-		v->st[1] = t;
+		v->st[1] = bu + t * scale;
+		ac_vec_set(v->pos,
+						v->st[0] * HEIGHTMAP_SIZE,
+						-50.f,
+						v->st[1] * HEIGHTMAP_SIZE,
+						0.f);
+		v++;
+		v->st[0] = 1.f;
+		v->st[1] = bu + t * scale;
+		ac_vec_set(v->pos,
+						v->st[0] * HEIGHTMAP_SIZE,
+						-50.f,
+						v->st[1] * HEIGHTMAP_SIZE,
+						0.f);
 		v++;
 	}
 
@@ -145,7 +158,9 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 					&g_ter_verts[0].pos.f[0]);
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].st[0]);
-	glDrawElements(GL_TRIANGLE_STRIP, 3 /*TERRAIN_NUM_INDICES * 3*/, GL_UNSIGNED_SHORT,
+	glDrawElements(GL_TRIANGLE_STRIP,
+					TERRAIN_NUM_INDICES,
+					GL_UNSIGNED_SHORT,
 					&g_ter_indices[0]);
 }
 
@@ -153,33 +168,30 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 								float minU, float minV,
 								float maxU, float maxV,
 								int level, float scale) {
-	ac_vec4_t v;
+	ac_vec4_t v, mins, maxs;
 	float halfU = (minU + maxU) * 0.5;
 	float halfV = (minV + maxV) * 0.5;
 
-	/*if (!v_noCull->getInt()) {
-		math::vec3 bounds[2] = {
-			math::vec3((minU - 0.5) * this->m_hMapSize,
-						(minV - 0.5) * this->m_hMapSize,
-						gVideo->getAssetMgr()->getHeightMap()->getBias()),
-			math::vec3((maxU - 0.5) * this->m_hMapSize,
-						(maxV - 0.5) * this->m_hMapSize,
-						gVideo->getAssetMgr()->getHeightMap()->getScale())
-		};
-		if (gVideo->getSceneMgr()->frustumCullBBox(bounds)) {
-			gVideo->getSceneMgr()->addTerrainStats(true);
-			return;
-		}
-	}*/
+	// apply frustum culling
+	ac_vec_set(mins, (minU - 0.5) * HEIGHTMAP_SIZE,
+					-10.f,
+					(minV - 0.5) * HEIGHTMAP_SIZE,
+					0.f);
+	ac_vec_set(maxs, (maxU - 0.5) * HEIGHTMAP_SIZE,
+					50.f,
+					(maxV - 0.5) * HEIGHTMAP_SIZE,
+					0.f);
+	if (ac_renderer_cull_bbox(mins, maxs))
+		return;
 
 	float d2 = (maxU - minU) * (float)HEIGHTMAP_SIZE
 				/ (TERRAIN_PATCH_SIZE_F - 1.f);
 	d2 *= d2;
 
 	ac_vec_set(v,
-				-(halfV - 0.5) * (float)HEIGHTMAP_SIZE,
-				128.f,
 				(halfU - 0.5) * (float)HEIGHTMAP_SIZE,
+				128.f,
+				(halfV - 0.5) * (float)HEIGHTMAP_SIZE,
 				0.f);
 	ac_vec_sub(v, cam, v);
 
@@ -207,31 +219,38 @@ void ac_renderer_terrain_bruteforce(void) {
 	float c;
 
 	glBegin(GL_TRIANGLE_STRIP);
+	glColor3f(1, 1, 1);
 	for (y = 0; y < HEIGHTMAP_SIZE - 1; y++) {
 		for (x = 0; x < HEIGHTMAP_SIZE - 1; x++) {
 			k = y * HEIGHTMAP_SIZE + x;
-			c = (float)g_heightmap[k] / 255.f;
-			glColor3f(c, c, c);
+			c = ((float)g_heightmap[k]) / 255.f;
+			//glColor3f(c, c, c);
+			glTexCoord2f(((float)x + 0.5) / (float)HEIGHTMAP_SIZE, ((float)y + 0.5) / (float)HEIGHTMAP_SIZE);
 			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
 			k = (y + 1) * HEIGHTMAP_SIZE + x;
-			c = (float)g_heightmap[k] / 255.f;
-			glColor3f(c, c, c);
+			c = ((float)g_heightmap[k]) / 255.f;
+			//glColor3f(c, c, c);
+			glTexCoord2f(((float)x + 0.5) / (float)HEIGHTMAP_SIZE, ((float)y + 1.5) / (float)HEIGHTMAP_SIZE);
 			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
 			k = y * HEIGHTMAP_SIZE + x + 1;
-			c = (float)g_heightmap[k] / 255.f;
-			glColor3f(c, c, c);
+			c = ((float)g_heightmap[k]) / 255.f;
+			//glColor3f(c, c, c);
+			glTexCoord2f(((float)x + 1.5) / (float)HEIGHTMAP_SIZE, ((float)y + 0.5) / (float)HEIGHTMAP_SIZE);
 			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2));
 			k = (y + 1) * HEIGHTMAP_SIZE + x + 1;
-			c = (float)g_heightmap[k] / 255.f;
-			glColor3f(c, c, c);
+			c = ((float)g_heightmap[k]) / 255.f;
+			//glColor3f(c, c, c);
+			glTexCoord2f(((float)x + 1.5) / (float)HEIGHTMAP_SIZE, ((float)y + 1.5) / (float)HEIGHTMAP_SIZE);
 			glVertex3f((float)(x - HEIGHTMAP_SIZE / 2 + 1), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
 		}
 		// degenerate triangle
-		glColor3f(c, 0, 0);
+		//glColor3f(c, 0, 0);
+		//glTexCoord2f(0, 0);
 		glVertex3f((float)(x - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
 		k = (y + 1) * HEIGHTMAP_SIZE;
-		c = (float)g_heightmap[k] / 255.f;
-		glColor3f(0, 0, c);
+		c = ((float)g_heightmap[k]) / 255.f;
+		//glColor3f(0, 0, c);
+		//glTexCoord2f(0, 0);
 		glVertex3f((float)(0 - HEIGHTMAP_SIZE / 2), c * 50.f, (float)(y - HEIGHTMAP_SIZE / 2 + 1));
 	}
 	glEnd();
@@ -240,17 +259,9 @@ void ac_renderer_terrain_bruteforce(void) {
 void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPushMatrix();
 
-#if 0
-	// apply our model view matrix
-	glMultMatrixf(g_ter_matrix);
-
-	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
-
-	ac_renderer_recurse_terrain(cam, 0.f, 0.f, 1.f, 1.f, g_ter_maxLevels, 1.f);
-#else
-	//glLoadIdentity();
+	/*//glLoadIdentity();
 	glPushMatrix();
-	glTranslatef(20, 20, 0);
+	//glTranslatef(20, 20, 0);
 	glBegin(GL_TRIANGLES);
 	glColor3f(1, 0, 0);
 	glVertex3f(10, 0, 0);
@@ -272,8 +283,22 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glColor3f(1, 1, 1);
 	glVertex3f(-3, 11, -10);
 	glEnd();
-	glPopMatrix();
+	glPopMatrix();*/
 
+#if 1
+	// centre the terrain
+	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
+
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
+
+	// traverse the quadtree
+	ac_renderer_recurse_terrain(cam,
+								0.f, 0.f, 1.f, 1.f,
+								g_ter_maxLevels, 1.f);
+#else
+	glEnable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 	ac_renderer_terrain_bruteforce();
 #endif
 	glPopMatrix();
@@ -287,7 +312,7 @@ bool ac_renderer_init(void) {
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
-	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 1);
+	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
 	// set window caption to say that we're working
 	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
@@ -316,6 +341,7 @@ bool ac_renderer_init(void) {
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST);
 
 	// generate resources
 	ac_renderer_create_terrain_indices();
@@ -337,9 +363,10 @@ void ac_renderer_set_heightmap(uchar *hmap) {
 	g_heightmap = hmap;
 	glGenTextures(1, &g_hmapTex);
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
+
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
 				HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 0,
-				GL_LUMINANCE, GL_BYTE, g_heightmap);
+				GL_LUMINANCE, GL_UNSIGNED_BYTE, g_heightmap);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -360,6 +387,7 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	int i;
 
 	// clear buffers
+	//glClearColor(0.f, 0.75f, 1.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// set up the GL projection matrix
@@ -368,7 +396,7 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	x = zNear * tan(vp->fov);
 	y = zNear * tan(vp->fov * 0.75);
 	glFrustum(-x, x, -y, y, zNear, zFar);
-	//gluPerspective(vp->fov / M_PI * 180.f, 1.33f, zNear, zFar);
+	ac_renderer_set_frustum();
 
 	// restore modelview matrix mode
 	glMatrixMode(GL_MODELVIEW);

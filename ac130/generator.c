@@ -156,8 +156,8 @@ const uchar *ac_gen_terrain(int seed) {
 #endif
 #if 0
 			// pass 2 - detail
-			freq *= 1.0002;
-			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(8.f
+			freq *= 1.00002;
+			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(127.f
 				* ac_gen_perlin(
 					(float)(x + xoff) * freq,
 					(float)(y + yoff) * freq,
