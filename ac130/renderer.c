@@ -20,15 +20,115 @@ GLuint		g_hmapTex;
 ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
+
+// tree resources
+ac_vertex_t	g_tree_verts[TREE_BASE + 1];
+uchar		g_tree_indices[TREE_BASE + 1];
+GLuint		g_tree_tex;
+
+// counters for measuring performance
 uint		*g_triCounter;
 uint		*g_vertCounter;
+uint		*g_displayedPatchCounter;
+uint		*g_culledPatchCounter;
 
-void ac_renderer_set_frustum(ac_vec4_t fwd, ac_vec4_t up, float x, float y,
-							float zNear, float zFar) {
+// frustum planes
+ac_vec4_t	g_frustum[6];
 
+void ac_renderer_set_frustum(ac_vec4_t pos,
+							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
+							float x, float y, float zNear, float zFar) {
+	ac_vec4_t v1, v2;
+
+	// culling debug (look straight down to best see it at work)
+#if 0
+	x *= 0.5;
+	y *= 0.5;
+#endif
+
+	// near plane
+	g_frustum[0] = fwd;
+	g_frustum[0].f[3] = ac_vec_dot(fwd, pos) + zNear;
+
+	// far plane
+	g_frustum[1] = ac_vec_mulf(fwd, -1.f);
+	g_frustum[1].f[3] = -ac_vec_dot(fwd, pos) - zFar;
+
+	// right plane
+	// v1 = fwd * zNear + right * x + up * -y
+	v1 = ac_vec_add(ac_vec_mulf(fwd, zNear),
+			ac_vec_add(ac_vec_mulf(right, x), ac_vec_mulf(up, -y)));
+	// v2 = p1 + up * 2y
+	v2 = ac_vec_add(v1, ac_vec_mulf(up, 2.f * y));
+	g_frustum[2] = ac_vec_normalize(ac_vec_cross(v2, v1));
+	g_frustum[2].f[3] = ac_vec_dot(g_frustum[2], ac_vec_add(v1, pos));
+
+	// left plane
+	// v1 -= right * 2 * x
+	v1 = ac_vec_add(v1, ac_vec_mulf(right, -2.f * x));
+	// v2 -= right * 2 * x
+	v2 = ac_vec_add(v2, ac_vec_mulf(right, -2.f * x));
+	g_frustum[3] = ac_vec_normalize(ac_vec_cross(v1, v2));
+	g_frustum[3].f[3] = ac_vec_dot(g_frustum[3], ac_vec_add(v1, pos));
+
+	// top plane
+	// v2 = v1 + right * 2 * x
+	v1 = ac_vec_add(v2, ac_vec_mulf(right, 2.f * x));
+	g_frustum[4] = ac_vec_normalize(ac_vec_cross(v2, v1));
+	g_frustum[4].f[3] = ac_vec_dot(g_frustum[4], ac_vec_add(v1, pos));
+
+	// bottom plane
+	// v1 -= up * 2 * y
+	v1 = ac_vec_add(v1, ac_vec_mulf(up, -2.f * y));
+	// v2 -= up * 2 * y
+	v2 = ac_vec_add(v2, ac_vec_mulf(up, -2.f * y));
+	g_frustum[5] = ac_vec_normalize(ac_vec_cross(v1, v2));
+	g_frustum[5].f[3] = ac_vec_dot(g_frustum[5], ac_vec_add(v1, pos));
+
+	assert(ac_vec_dot(g_frustum[0], g_frustum[1]) < 0.f);
+	// the left and right planes may be perpendicular, thus less or equal
+	assert(ac_vec_dot(g_frustum[2], g_frustum[3]) <= 0.f);
+	assert(ac_vec_dot(g_frustum[4], g_frustum[5]) < 0.f);
 }
 
-bool ac_renderer_cull_bbox(ac_vec4_t mins, ac_vec4_t maxs) {
+bool ac_renderer_cull_point(ac_vec4_t p) {
+	int i;
+	for (i = 0; i < 6; i++) {
+		if (ac_vec_dot(p, g_frustum[i]) < g_frustum[i].f[3])
+			// point is behind one of the planes
+			return true;
+	}
+	return true;
+}
+
+bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
+	int i, j;
+	ac_vec4_t points[8];
+	bool front, back, anyBack = false;
+
+	// fill the points to check
+	for (i = 0; i < 8; i++) {
+		points[i] = ac_vec_set(bounds[i & 1].f[0],
+								bounds[(i >> 1) & 1].f[1],
+								bounds[(i >> 2) & 1].f[2],
+								0.f);
+	}
+
+	for (i = 0; i < 6; i++) {
+		front = back = false;
+		for (j = 0; j < 8; j++) {
+			if (ac_vec_dot(points[j], g_frustum[i]) > g_frustum[i].f[3]) {
+				front = true;
+				if (back)
+					break;		// a point is in front
+			} else
+				back = true;
+		}
+		if (!front)
+			// all points were behind one of the planes
+			return true;
+		anyBack |= back;
+	}
 	return false;
 }
 
@@ -203,6 +303,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 					&g_ter_indices[0]);
 	*g_vertCounter += TERRAIN_NUM_VERTS;
 	*g_triCounter += TERRAIN_NUM_INDICES - 2;
+	(*g_displayedPatchCounter)++;
 
 	// pop both matrices
 	glMatrixMode(GL_TEXTURE);
@@ -215,21 +316,23 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 								float minU, float minV,
 								float maxU, float maxV,
 								int level, float scale) {
-	ac_vec4_t v, mins, maxs;
+	ac_vec4_t v, bounds[2];
 	float halfU = (minU + maxU) * 0.5;
 	float halfV = (minV + maxV) * 0.5;
 
 	// apply frustum culling
-	mins = ac_vec_set((minU - 0.5) * HEIGHTMAP_SIZE,
+	bounds[0] = ac_vec_set((minU - 0.5) * HEIGHTMAP_SIZE,
 					-10.f,
 					(minV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
-	maxs = ac_vec_set((maxU - 0.5) * HEIGHTMAP_SIZE,
+	bounds[1] = ac_vec_set((maxU - 0.5) * HEIGHTMAP_SIZE,
 					50.f,
 					(maxV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
-	if (ac_renderer_cull_bbox(mins, maxs))
+	if (ac_renderer_cull_bbox(bounds)) {
+		(*g_culledPatchCounter)++;
 		return;
+	}
 
 	float d2 = (maxU - minU) * (float)HEIGHTMAP_SIZE
 				/ (TERRAIN_PATCH_SIZE_F - 1.f);
@@ -290,7 +393,10 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPopMatrix();
 }
 
-bool ac_renderer_init(uint *vcounter, uint *tcounter) {
+bool ac_renderer_init(uint *vcounter, uint *tcounter,
+					uint *dpcounter, uint *cpcounter) {
+	float fogcolour[] = {0.0, 0.0, 0.0, 1.0};
+
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
@@ -305,11 +411,13 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter) {
 		return false;
 	}
 
-	if (!vcounter || !tcounter)
+	if (!vcounter || !tcounter || !dpcounter || !cpcounter)
 		return false;
 
 	g_vertCounter = vcounter;
 	g_triCounter = tcounter;
+	g_displayedPatchCounter = dpcounter;
+	g_culledPatchCounter = cpcounter;
 
 	SDL_WM_SetCaption("AC-130", "AC-130");
 
@@ -331,12 +439,17 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter) {
 	/*glCullFace(GL_BACK);
 	glFrontFace(GL_CCW);
 	glEnable(GL_CULL_FACE);*/
-	glEnable(GL_DEPTH_TEST);
+
+	// set up fog
+	glFogi(GL_FOG_MODE, GL_EXP2);
+	glFogfv(GL_FOG_COLOR, fogcolour);
+	glFogf(GL_FOG_DENSITY, 0.005);
 
 	// generate resources
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
 	ac_renderer_calc_terrain_lodlevels();
+	//ac_gen_tree
 
 	return true;
 }
@@ -365,7 +478,7 @@ void ac_renderer_set_heightmap(uchar *hmap) {
 }
 
 void ac_renderer_start_scene(ac_viewpoint_t *vp) {
-	GLmatrix_t m = {
+	static GLmatrix_t m = {
 		1, 0, 0, 0,	// 0
 		0, 1, 0, 0,	// 4
 		0, 0, 1, 0,	// 8
@@ -374,11 +487,15 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	double zNear = 0.1, zFar = 1000.0;
 	double x, y;
 	float cy, cp, sy, sp;
-	ac_vec4_t fwd, up;
+	ac_vec4_t fwd, right, up;
 
 	// clear buffers
 	//glClearColor(0.f, 0.75f, 1.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	// flick some switches for the 3D rendering
+	glEnable(GL_DEPTH_TEST);
+	glEnable(GL_FOG);
 
 	// set up the GL projection matrix
 	glMatrixMode(GL_PROJECTION);
@@ -398,17 +515,17 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	m[0] = cy;
 	m[1] = sp * sy;
 	m[2] = cp * sy;
-	m[3] = 0;
+	//m[3] = 0;
 	// column 2
-	m[4] = 0;
+	//m[4] = 0;
 	m[5] = cp;
 	m[6] = -sp;
-	m[7] = 0;
+	//m[7] = 0;
 	// column 3
 	m[8] = -sy;
 	m[9] = sp * cy;
 	m[10] = cp * cy;
-	m[11] = 0;
+	//m[11] = 0;
 	// column 4
 	m[12] = -vp->origin.f[0] * m[0]
 		- vp->origin.f[1] * m[4]
@@ -419,13 +536,14 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	m[14] = -vp->origin.f[0] * m[2]
 		- vp->origin.f[1] * m[6]
 		- vp->origin.f[2] * m[10];
-	m[15] = 1;
+	//m[15] = 1;
 	glLoadMatrixf(m);
 
 	// calculate frustum planes
 	fwd = ac_vec_set(-m[2], -m[6], -m[10], 0);
+	right = ac_vec_set(m[0], m[4], m[8], 0);
 	up = ac_vec_set(m[1], m[5], m[9], 0);
-	ac_renderer_set_frustum(fwd, up, x, y, zNear, zFar);
+	ac_renderer_set_frustum(vp->origin, fwd, right, up, x, y, zNear, zFar);
 
 	// draw terrain
 	ac_renderer_draw_terrain(vp->origin);

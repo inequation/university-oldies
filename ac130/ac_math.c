@@ -38,7 +38,7 @@ inline ac_vec4_t ac_vec_ma(ac_vec4_t a, ac_vec4_t b, ac_vec4_t c) {
 
 inline float ac_vec_dot(ac_vec4_t a, ac_vec4_t b) {
 	ac_vec4_t tmp = ac_vec_mul(a, b);
-	return tmp.f[0] + tmp.f[1] + tmp.f[2] + tmp.f[3];
+	return tmp.f[0] + tmp.f[1] + tmp.f[2]/* + tmp.f[3]*/;
 }
 
 inline ac_vec4_t ac_vec_cross(ac_vec4_t a, ac_vec4_t b) {

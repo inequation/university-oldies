@@ -60,8 +60,11 @@ typedef struct {
 /// Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
 /// \param tcounter		triangle counter address (for performance measurement)
+/// \param dpcounter	displayed terrain patch counter address
+/// \param cpcounter	culled terrain patch counter address
 /// \return				true on success
-bool ac_renderer_init(uint *vcounter, uint *tcounter);
+bool ac_renderer_init(uint *vcounter, uint *tcounter,
+					uint *dpcounter, uint *cpcounter);
 
 /// Shuts the renderer down.
 void ac_renderer_shutdown(void);
@@ -106,8 +109,10 @@ void ac_renderer_composite(bool negative);
 // Content generator interface
 // =========================================================
 
-#define HEIGHTMAP_SIZE		512
+#define HEIGHTMAP_SIZE		1024
 #define HEIGHT_SCALE		(50.f / 255.f)
+
+#define TREE_BASE			5
 
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it

@@ -16,6 +16,8 @@ int main (int argc, char *argv[]) {
 	uint		frameCount = 0;
 	uint		vertCount = 0;
 	uint		triCount = 0;
+	uint		dpCount = 0;
+	uint		cpCount = 0;
 	uint		frameCountTime;
 
 	// initialize SDL
@@ -25,7 +27,7 @@ int main (int argc, char *argv[]) {
 	}
 
 	// initialize renderer
-	if (!ac_renderer_init(&vertCount, &triCount)) {
+	if (!ac_renderer_init(&vertCount, &triCount, &dpCount, &cpCount)) {
 		fprintf(stderr, "Unable to init renderer\n");
 		return 1;
 	}
@@ -33,9 +35,6 @@ int main (int argc, char *argv[]) {
 	// set window caption to say that we're working
 	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
 					"AC-130");
-
-	// initialize tick counter
-	frameCountTime = prevTime = SDL_GetTicks();
 
 	// make sure SDL cleans up before exit
 	atexit(SDL_Quit);
@@ -55,6 +54,12 @@ int main (int argc, char *argv[]) {
 	bool grab = false;
 
 	memset(&prevInput, 0, sizeof(prevInput));
+
+	// initialize tick counter
+	frameCountTime = SDL_GetTicks();
+	// hardcode the first frame time at 20ms to get a bit more accurate results
+	// of the FPS counter on the first FPS calculation
+	prevTime = frameCountTime - 20;
 
 	// program main loop
 	done = false;
@@ -107,14 +112,17 @@ int main (int argc, char *argv[]) {
 
 		// show fps
 		if (curTime - frameCountTime >= 2000) {
-			float scale = 1.f / (float)frameCount;
-			printf("%.0f FPS (%.0f tris/%.0f verts per frame)\n",
+			float perFrameScale = 1.f / (float)frameCount;
+			printf("%.0f FPS, %.0f tris/%.0f verts, "
+					"%.0f/%.0f terrain patches culled (per frame)\n",
 					(float)frameCount
 						/ ((float)(curTime - frameCountTime) * 0.001),
-					(float)triCount * scale,
-					(float)vertCount * scale);
+					(float)triCount * perFrameScale,
+					(float)vertCount * perFrameScale,
+					(float)cpCount * perFrameScale,
+					(float)(dpCount + cpCount) * perFrameScale);
 			frameCountTime = curTime;
-			frameCount = triCount = vertCount = 0;
+			frameCount = triCount = vertCount = dpCount = cpCount = 0;
 		}
 
 		ac_game_frame(curTime, frameTime, &curInput);

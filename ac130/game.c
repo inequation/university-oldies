@@ -18,8 +18,8 @@ void ac_game_shutdown(void) {
 }
 
 #define FLOATING_RADIUS		200.f
-#define TIME_SCALE			0.09
-#define MOUSE_SCALE			0.0015
+#define TIME_SCALE			0.04
+#define MOUSE_SCALE			0.001
 void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	static ac_viewpoint_t vp = {
 		{{0, 0, 0, 0}},
@@ -33,7 +33,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	vp.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE
 		+ frameTime * TIME_SCALE;	// keep the cam in sync with the plane
 	vp.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE;
-#if 0
+#if 1
 	if (vp.angles[0] < -plane_angle + M_PI * 0.2)
 		vp.angles[0] = -plane_angle + M_PI * 0.2;
 	else if (vp.angles[0] > -plane_angle + M_PI * 0.8)
@@ -55,7 +55,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 				sinf(plane_angle) * FLOATING_RADIUS,
 				0.f);
 	vp.origin = ac_vec_add(tmp, vp.origin);
-	vp.fov = 45.f / 180.f * M_PI;
+	vp.fov = 20.f / 180.f * M_PI;
 	ac_renderer_start_scene(&vp);
 	ac_renderer_finish_3D();
 	ac_renderer_composite(false);
