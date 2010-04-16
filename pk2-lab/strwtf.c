@@ -5,10 +5,13 @@ void strwtf(const char *in, const char *delim, char ***out) {
 	char *p, *q, **r, *s;
 	int count = 0;
 
+    s = (char *)in;
 	for (p = (char *)in; *p; p++) {
 		for (q = (char *)delim; *q; q++) {
 			if (*p == *q) {
-				count++;
+			    if (p - s > 0)
+                    count++;
+                s = p + 1;
 				break;
 			}
 		}
