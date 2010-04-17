@@ -23,8 +23,9 @@ int			g_ter_maxLevels;
 
 // tree resources
 ac_vertex_t	g_tree_verts[TREE_BASE + 1];
-uchar		g_tree_indices[TREE_BASE + 1];
-GLuint		g_tree_tex;
+uchar		g_tree_indices[TREE_BASE + 2];
+uchar		g_tree_texture[TREE_TEXTURE_SIZE];
+GLuint		g_treeTex;
 
 // counters for measuring performance
 uint		*g_triCounter;
@@ -86,19 +87,18 @@ void ac_renderer_set_frustum(ac_vec4_t pos,
 	g_frustum[5].f[3] = ac_vec_dot(g_frustum[5], ac_vec_add(v1, pos));
 
 	assert(ac_vec_dot(g_frustum[0], g_frustum[1]) < 0.f);
-	// the left and right planes may be perpendicular, thus less or equal
-	assert(ac_vec_dot(g_frustum[2], g_frustum[3]) <= 0.f);
-	assert(ac_vec_dot(g_frustum[4], g_frustum[5]) < 0.f);
+	assert(ac_vec_dot(g_frustum[2], g_frustum[3]) < 1.f);
+	assert(ac_vec_dot(g_frustum[4], g_frustum[5]) < 1.f);
 }
 
-bool ac_renderer_cull_point(ac_vec4_t p) {
+bool ac_renderer_cull_sphere(ac_vec4_t p, float radius) {
 	int i;
 	for (i = 0; i < 6; i++) {
-		if (ac_vec_dot(p, g_frustum[i]) < g_frustum[i].f[3])
-			// point is behind one of the planes
+		if (ac_vec_dot(p, g_frustum[i]) + radius < g_frustum[i].f[3])
+			// sphere is behind one of the planes
 			return true;
 	}
-	return true;
+	return false;
 }
 
 bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
@@ -189,7 +189,7 @@ void ac_renderer_fill_terrain_vertices(void) {
 	// fill patch body vertices
 	ac_vertex_t *v = g_ter_verts;
 	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
-		t = i * invScaleY;
+		t = 1.f - i * invScaleY;
 		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
 			s = j * invScaleX;
 			v->st[0] = s;
@@ -203,17 +203,17 @@ void ac_renderer_fill_terrain_vertices(void) {
 	for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
 		s = j * invScaleX;
 		v->st[0] = s;
-		v->st[1] = 0.f;
-		v->pos = ac_vec_set(s, -10.f, 0.f, 0.f);
-		v++;
-		v->st[0] = s;
 		v->st[1] = 1.f;
 		v->pos = ac_vec_set(s, -10.f, 1.f, 0.f);
+		v++;
+		v->st[0] = s;
+		v->st[1] = 0.f;
+		v->pos = ac_vec_set(s, -10.f, 0.f, 0.f);
 		v++;
 	}
 
 	for (i = 1; i < TERRAIN_PATCH_SIZE - 1; i++) {
-		t = i * invScaleY;
+		t = 1.f - i * invScaleY;
 		v->st[0] = 0.f;
 		v->st[1] = t;
 		v->pos = ac_vec_set(0.f, -10.f, t, 0.f);
@@ -326,7 +326,7 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 					(minV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
 	bounds[1] = ac_vec_set((maxU - 0.5) * HEIGHTMAP_SIZE,
-					50.f,
+					50,
 					(maxV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
 	if (ac_renderer_cull_bbox(bounds)) {
@@ -365,9 +365,11 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glPushMatrix();
 
+#if 0
+	// debug coordinate system triangle
 	//glLoadIdentity();
 	glPushMatrix();
-	//glTranslatef(20, 20, 0);
+	glTranslatef(0, 50, 0);
 	glBegin(GL_TRIANGLES);
 	glColor3f(1, 0, 0);
 	glVertex3f(10, 0, 0);
@@ -378,6 +380,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glEnd();
 	glPopMatrix();
 	glColor3f(1, 1, 1);
+#endif
 
 	// centre the terrain
 	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
@@ -390,12 +393,90 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 								0.f, 0.f, 1.f, 1.f,
 								g_ter_maxLevels, 1.f);
 
+	glDisable(GL_TEXTURE_2D);
+
 	glPopMatrix();
+}
+
+void ac_renderer_create_tree(void) {
+	ac_gen_tree(g_tree_texture, g_tree_verts, g_tree_indices);
+	glGenTextures(1, &g_treeTex);
+	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+
+	glTexImage1D(GL_TEXTURE_1D, 0, GL_LUMINANCE8,
+				TREE_TEXTURE_SIZE, 0,
+				GL_LUMINANCE, GL_UNSIGNED_BYTE, g_tree_texture);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+}
+
+void ac_renderer_start_trees(void) {
+	glEnable(GL_TEXTURE_1D);
+
+	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].pos.f[0]);
+	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].st[0]);
+}
+
+void ac_renderer_add_tree(ac_tree_t *t) {
+	static GLmatrix_t m = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		1, 0, 0, 1
+	};
+	float c, s;
+
+	// apply frustum culling
+	if (ac_renderer_cull_sphere(t->pos, t->Yscale))
+		return;
+
+	glPushMatrix();
+
+	c = cosf(t->ang);
+	s = sinf(t->ang);
+	// column 1
+	m[0] = t->XZscale * c;
+	//m[1] = 0;
+	m[2] = t->XZscale * -s;
+	//m[3] = 0;
+	// column 2
+	//m[4] = 0;
+	m[5] = t->Yscale;
+	//m[6] = 0;
+	//m[7] = 0;
+	// column 3
+	m[8] = t->XZscale * s;
+	//m[9] = 0;
+	m[10] = t->XZscale * c;
+	//m[11] = 0;
+	// column 4
+	m[12] = t->pos.f[0];
+	m[13] = t->pos.f[1];
+	m[14] = t->pos.f[2];
+	//m[15] = 1;
+	glMultMatrixf(m);
+
+	glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
+					&g_tree_indices[0]);
+	*g_vertCounter += TREE_BASE + 1;
+	*g_triCounter += TREE_BASE + 2;
+
+	glPopMatrix();
+}
+
+void ac_renderer_start_bldgs(void) {
+	glDisable(GL_TEXTURE_1D);
+	glEnable(GL_TEXTURE_2D);
 }
 
 bool ac_renderer_init(uint *vcounter, uint *tcounter,
 					uint *dpcounter, uint *cpcounter) {
-	float fogcolour[] = {0.0, 0.0, 0.0, 1.0};
+	float fogcolour[] = {0, 0, 0, 1};
 
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -449,14 +530,14 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
 	ac_renderer_calc_terrain_lodlevels();
-	//ac_gen_tree
+	ac_renderer_create_tree();
 
 	return true;
 }
 
 void ac_renderer_shutdown(void) {
-	if (g_heightmap != NULL)
-		glDeleteTextures(1, &g_hmapTex);
+	glDeleteTextures(1, &g_hmapTex);
+	glDeleteTextures(1, &g_treeTex);
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }

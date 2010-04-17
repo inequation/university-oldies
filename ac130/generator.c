@@ -180,3 +180,153 @@ const uchar *ac_gen_terrain(int seed) {
 
 	return g_heightmap;
 }
+
+float ac_gen_sample_height(float x, float y) {
+#if 1
+	float xi, yi, xfrac, yfrac;
+	float fR1, fR2;
+
+	xfrac = modff(x, &xi);
+	yfrac = modff(y, &yi);
+
+	// bilinear filtering
+	fR1 = (1.f - xfrac) * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
+		+ xfrac * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
+	fR2 = (1.f - xfrac) * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi]
+		+ xfrac * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
+	return ((1.f - yfrac) * fR1 + yfrac * fR2) * HEIGHT_SCALE;
+#else
+	return g_heightmap[(int)roundf(y) * HEIGHTMAP_SIZE + (int)roundf(x)]
+		* HEIGHT_SCALE;
+#endif
+}
+
+void ac_gen_tree(uchar *texture, ac_vertex_t *verts, uchar *indices) {
+	int i;
+	const float invScale = 1.f / (TREE_TEXTURE_SIZE - 1);
+	const float rpi = (M_PI * 2.f) / TREE_BASE;	// radians per iteration
+
+	// generate vertices and indices
+	indices[0] = 0;	// start with the tip of the tree
+	indices[TREE_BASE + 1] = 1;	// first vertex of the base - full circle
+	// vertex #0 - tip of the tree
+	verts[0].pos = ac_vec_set(0, 0.9, 0, 0);
+	verts[0].st[0] = 1;
+	// tree base vertices and indices
+	for (i = 1; i < TREE_BASE + 1; i++) {
+		verts[i].pos = ac_vec_set(cosf(i * rpi), -0.1, sinf(i * rpi), 0);
+		verts[i].st[0] = 0;
+		indices[i] = i;
+	}
+
+	// generate texture gradient
+	// exponential gradient from gray to black
+	for (i = 0; i < TREE_TEXTURE_SIZE; i++)
+		texture[i] = 127 * expf(-2.f * i * invScale);
+}
+
+static uchar	*g_propmap;
+
+static void ac_gen_propmap_populate(int x, int y, int *counter, int *trace,
+									uchar value) {
+	int k;
+
+	if (x < 0 || x >= PROPMAP_SIZE || y < 0 || y >= PROPMAP_SIZE)
+		return;
+	if (!(*trace) || !(*counter))
+		return;
+	k = y * PROPMAP_SIZE + x;
+	if (g_propmap[k] != 0)
+		return;
+	g_propmap[k] = value;
+	(*trace)--;
+	(*counter)--;
+	if (!(*trace) || !(*counter))
+		return;
+	// try to recurse in one of the directions with a 33% chance
+	if (rand() % 100 > 33)
+		ac_gen_propmap_populate(x + 1, y, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x + 1, y + 1, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x, y + 1, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x - 1, y + 1, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x - 1, y, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x - 1, y - 1, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x, y - 1, counter, trace, value);
+	if (*counter && rand() % 100 > 33)
+		ac_gen_propmap_populate(x + 1, y - 1, counter, trace, value);
+}
+
+void ac_gen_propmap(void) {
+	const int numFields = PROPMAP_SIZE * PROPMAP_SIZE;
+	int treeFields = TREE_COVERAGE * numFields;
+	int bldgFields = BLDG_COVERAGE * numFields;
+
+	int trace;
+
+	while (treeFields) {
+		trace = 1 + ac_gen_rand() % 10;
+		ac_gen_propmap_populate(rand() % PROPMAP_SIZE, rand() % PROPMAP_SIZE,
+								&treeFields, &trace, 1);
+	}
+
+	while (bldgFields) {
+		trace = 1 + ac_gen_rand() % 4;
+		ac_gen_propmap_populate(rand() % PROPMAP_SIZE, rand() % PROPMAP_SIZE,
+								&bldgFields, &trace, 2);
+	}
+}
+
+void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
+					int *numBldgs, ac_bldg_t *bldgs) {
+	int basex, basey, i;
+	float x, z;
+	g_propmap = malloc(sizeof(*g_propmap) * PROPMAP_SIZE * PROPMAP_SIZE);
+	memset(g_propmap, 0, sizeof(g_propmap));
+
+	*numTrees = 0;
+	*numBldgs = 0;
+
+	// generate a propmap to roughly place clusters of objects
+	ac_gen_propmap();
+
+	// use the propmap to place the actual objects
+	for (basey = 0; basey < PROPMAP_SIZE; basey++) {
+		for (basex = 0; basex < PROPMAP_SIZE; basex++) {
+			switch (g_propmap[basey * PROPMAP_SIZE + basex]) {
+				case 0:
+					continue;
+				case 1:	// tree
+					for (i = 0; i < TREES_PER_FIELD; i++) {
+						x = (basex << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+							% ((1 << PROPMAP_SHIFT) * 100));
+						z = (basey << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+							% ((1 << PROPMAP_SHIFT) * 100));
+						trees[*numTrees].pos = ac_vec_set(
+							x - HEIGHTMAP_SIZE * 0.5,
+							ac_gen_sample_height(x, z),
+							z - HEIGHTMAP_SIZE * 0.5,
+							0);
+						trees[*numTrees].ang =
+							(ac_gen_rand() % 360) / 180.f * M_PI;
+						trees[*numTrees].XZscale =
+							0.6 + 0.001 * (ac_gen_rand() % 801);
+						trees[*numTrees].Yscale =
+							1.6 + 0.001 * (ac_gen_rand() % 1601);
+						(*numTrees)++;
+					}
+					break;
+				case 2:	// building
+					// TODO
+					break;
+			}
+		}
+	}
+
+	free(g_propmap);
+}

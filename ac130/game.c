@@ -7,14 +7,38 @@
 
 const uchar	*g_hmap;
 
+int			g_num_trees;
+ac_tree_t	*g_trees;
+
+int			g_num_bldgs;
+ac_bldg_t	*g_bldgs;
+
 bool ac_game_init(void) {
 	// set new terrain heightmap
 	g_hmap = ac_gen_terrain(0xDEADBEEF);
 	ac_renderer_set_heightmap((uchar *)g_hmap);
+
+	// generate proplists
+	g_trees = malloc(sizeof(*g_trees) * MAX_NUM_TREES);
+	g_bldgs = malloc(sizeof(*g_bldgs) * MAX_NUM_TREES);
+	ac_gen_proplists(&g_num_trees, g_trees, &g_num_bldgs, g_bldgs);
 	return true;
 }
 
 void ac_game_shutdown(void) {
+	free(g_trees);
+	free(g_bldgs);
+}
+
+void ac_game_draw_props(void) {
+	int i;
+
+	ac_renderer_start_trees();
+	for (i = 0; i < g_num_trees; i++)
+		ac_renderer_add_tree(&g_trees[i]);
+	ac_renderer_start_bldgs();
+	/*for (i = 0; i < g_num_bldgs; i++)
+		ac_renderer_add_bldg(&g_bldgs[i]);*/
 }
 
 #define FLOATING_RADIUS		200.f
@@ -55,8 +79,11 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 				sinf(plane_angle) * FLOATING_RADIUS,
 				0.f);
 	vp.origin = ac_vec_add(tmp, vp.origin);
-	vp.fov = 20.f / 180.f * M_PI;
+	vp.fov = M_PI * 0.12;//20.f / 180.f * M_PI;
 	ac_renderer_start_scene(&vp);
+
+	ac_game_draw_props();
+
 	ac_renderer_finish_3D();
 	ac_renderer_composite(false);
 }

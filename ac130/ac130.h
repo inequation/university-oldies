@@ -15,9 +15,113 @@
 // our own math module
 #include "ac_math.h"
 
+// =========================================================
+// Type definitions
+// =========================================================
+
 typedef unsigned char	uchar;
 typedef unsigned short	ushort;
 typedef unsigned int	uint;
+
+/// Tree prop structure.
+typedef struct {
+	ac_vec4_t				pos;		/// position at which to spawn the tree
+	float					ang;		/// orientation (rotation around the Y
+										/// axis) of the tree
+	float					XZscale;	/// horizontal scale factor of the tree
+	float					Yscale;		/// vertical scale factor of the tree
+} ac_tree_t;
+
+/// Building prop structure.
+typedef struct {
+	ac_vec4_t				pos;		/// position of the building's origin
+	float					ang;		/// orientation (rotation around the Y
+										/// axis) of the tree
+	float					Xscale;		/// horiz. X scale factor of the tree
+	float					Yscale;		/// horiz. Z scale factor of the tree
+	float					Zscale;		/// vertical scale factor of the tree
+	bool					slantedRoof;/// "architectural" setting - if true,
+										/// adds a building with a slanted roof,
+										/// otherwise a flat one
+} ac_bldg_t;
+
+/// Viewpoint definition structure.
+typedef struct {
+	ac_vec4_t	origin;		/// camera position
+	float		angles[2];	/// camera direction defined by yaw and pitch angles
+	float		fov;		/// field of view angle in radians
+} ac_viewpoint_t;
+
+/// Geometry vertex.
+typedef struct {
+	ac_vec4_t	pos;		/// vertex position
+	float		st[2];		/// texture coordinates
+} ac_vertex_t;
+
+// =========================================================
+// Content generator interface
+// =========================================================
+
+#define HEIGHTMAP_SIZE		1024
+#define HEIGHT_SCALE		(50.f / 255.f)
+
+#define TREE_BASE			7
+#define TREE_TEXTURE_SIZE	64
+
+#define PROPMAP_SHIFT		4
+#define PROPMAP_SIZE		(HEIGHTMAP_SIZE >> PROPMAP_SHIFT)
+#define TREE_COVERAGE		0.6
+#define BLDG_COVERAGE		0.1
+#define TREES_PER_FIELD		12
+#define BLDGS_PER_FIELD		6
+
+#define MAX_NUM_TREES		(TREES_PER_FIELD								\
+								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
+#define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
+								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
+
+/// Generates the terrain heightmap.
+/// \note				The heightmap is stored in stack memory, therefore it
+///						should not be freed.
+/// \return				constant pointer to the heightmap
+/// \param seed			random number seed; ensures identical random number
+///						sequence each run
+const uchar *ac_gen_terrain(int seed);
+
+/// Generates tree resources.
+/// \note				All the resources are stored in heap memory, therefore
+///						freeing it is the client's responsibility.
+/// \param texture		texture byte array
+/// \param verts		vertex array
+/// \param indices		index array
+void ac_gen_tree(uchar *texture, ac_vertex_t *verts, uchar *indices);
+
+/// Generates unit-size (1x1x1) building resources.
+/// \note				All the resources are stored in heap memory, therefore
+///						freeing it is the client's responsibility.
+/// \param texture		texture pointer address
+/// \param flatVerts	vertex array pointer address for the flat roof building
+///						variant
+/// \param flatIndices	index array pointer address for the flat roof building
+///						variant
+/// \param slantedVerts	vertex array pointer address for the slanted roof
+///						building variant
+/// \param slantedIndices	index array pointer address for the slanted roof
+///						building variant
+void ac_gen_buildings(uchar **texture,
+					ac_vertex_t **flatVerts, int **flatIndices,
+					ac_vertex_t **slantedVerts, int **slantedIndices);
+
+/// Generates prop (tree and buildings) lists.
+/// \note				Both trees and bldgs must be preallocated by the caller.
+/// \param numTrees		pointer to where to store the tree count
+/// \param trees		the array to which to write the prop placement
+///						information
+/// \param numBldgs		pointer to where to store the building count
+/// \param bldgs		the array to which to write the prop placement
+///						information
+void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
+					int *numBldgs, ac_bldg_t *bldgs);
 
 // =========================================================
 // Renderer interface
@@ -44,19 +148,6 @@ typedef unsigned int	uint;
 										+ TERRAIN_NUM_SKIRT_INDICES)
 #define TERRAIN_LOD					50.f
 
-/// Viewpoint definition structure.
-typedef struct {
-	ac_vec4_t	origin;		/// camera position
-	float		angles[2];	/// camera direction defined by yaw and pitch angles
-	float		fov;		/// field of view angle in radians
-} ac_viewpoint_t;
-
-/// Geometry vertex.
-typedef struct {
-	ac_vec4_t	pos;		/// vertex position
-	float		st[2];		/// texture coordinates
-} ac_vertex_t;
-
 /// Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
 /// \param tcounter		triangle counter address (for performance measurement)
@@ -76,17 +167,19 @@ void ac_renderer_set_heightmap(uchar *hmap);
 /// \note				Must be called *before* \ref ac_renderer_finish3D
 void ac_renderer_start_scene(ac_viewpoint_t *vp);
 
+/// Puts the renderer into the tree rendering state - binds all the buffers once
+/// in order to speed up object instancing.
+void ac_renderer_start_trees(void);
+
 /// Adds a tree to the scene at the given position.
-void ac_renderer_add_tree(ac_vec4_t origin);
+void ac_renderer_add_tree(ac_tree_t *t);
+
+/// Puts the renderer into the building rendering state - binds all the buffers
+/// once in order to speed up object instancing.
+void ac_renderer_start_bldgs(void);
 
 /// Adds a building to the scene.
-/// \param origin		position of the building's origin
-/// \param dimensions	dimensions of the building
-/// \param angle		building's yaw angle
-/// \param slantedRoof	"architectural" setting - if true, adds a building with
-///						a slanted roof, otherwise a flat one
-void ac_renderer_add_bldg(ac_vec4_t origin, ac_vec4_t dimensions, float angle,
-						bool slantedRoof);
+void ac_renderer_add_bldg(ac_bldg_t *b);
 
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
 /// switches to the 2D (HUD) stage.
@@ -104,47 +197,6 @@ void ac_renderer_finish_2D(void);
 /// outputs the frame to screen.
 /// \param negative		if true, inverts display colours
 void ac_renderer_composite(bool negative);
-
-// =========================================================
-// Content generator interface
-// =========================================================
-
-#define HEIGHTMAP_SIZE		1024
-#define HEIGHT_SCALE		(50.f / 255.f)
-
-#define TREE_BASE			5
-
-/// Generates the terrain heightmap.
-/// \note				The heightmap is stored in stack memory, therefore it
-///						should not be freed.
-/// \return				constant pointer to the heightmap
-/// \param seed			random number seed; ensures identical random number
-///						sequence each run
-const uchar *ac_gen_terrain(int seed);
-
-/// Generates tree resources.
-/// \note				All the resources are stored in heap memory, therefore
-///						freeing it is the client's responsibility.
-/// \param texture		texture pointer address
-/// \param verts		vertex array pointer address
-/// \param indices		index array pointer address
-void ac_gen_tree(uchar **texture, ac_vertex_t **verts, int **indices);
-
-/// Generates unit-size (1x1x1) building resources.
-/// \note				All the resources are stored in heap memory, therefore
-///						freeing it is the client's responsibility.
-/// \param texture		texture pointer address
-/// \param flatVerts	vertex array pointer address for the flat roof building
-///						variant
-/// \param flatIndices	index array pointer address for the flat roof building
-///						variant
-/// \param slantedVerts	vertex array pointer address for the slanted roof
-///						building variant
-/// \param slantedIndices	index array pointer address for the slanted roof
-///						building variant
-void ac_gen_buildings(uchar **texture,
-					ac_vertex_t **flatVerts, int **flatIndices,
-					ac_vertex_t **slantedVerts, int **slantedIndices);
 
 // =========================================================
 // Game logic interface
