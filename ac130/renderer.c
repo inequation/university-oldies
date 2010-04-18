@@ -102,6 +102,40 @@ bool ac_renderer_cull_sphere(ac_vec4_t p, float radius) {
 }
 
 bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
+	// set to 0 for the slow, naive implementation
+#if 1
+	ac_vec4_t v;
+	int i, x, y, z;
+	//bool intersect = false;
+
+	for (i = 0; i < 6; i++) {
+		// floating point magic! extract the sign bits
+#define AS_INT(f)		(*(int *)(&(f)))
+		x = (AS_INT(g_frustum[i].f[0]) & 0x80000000) >> 31;
+		y = (AS_INT(g_frustum[i].f[1]) & 0x80000000) >> 31;
+		z = (AS_INT(g_frustum[i].f[2]) & 0x80000000) >> 31;
+#undef AS_INT
+		// test the negative far point against the plane
+		v = ac_vec_set(
+				bounds[1 - x].f[0],
+				bounds[1 - y].f[1],
+				bounds[1 - z].f[2],
+				0);
+		if (ac_vec_dot(v, g_frustum[i]) < g_frustum[i].f[3])
+			// negative far point behind plane -> box outside frustum
+			return true;
+		// test the positive far point against the plane
+		v = ac_vec_set(
+				bounds[x].f[0],
+				bounds[y].f[1],
+				bounds[z].f[2],
+				0);
+		/*if (ac_vec_dot(v, g_frustum[i]) < g_frustum[i].f[3])
+			intersect = true;*/
+	}
+	//if (!intersect)
+		return false;
+#else
 	int i, j;
 	ac_vec4_t points[8];
 	bool front, back, anyBack = false;
@@ -130,6 +164,7 @@ bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
 		anyBack |= back;
 	}
 	return false;
+#endif
 }
 
 void ac_renderer_fill_terrain_indices(void) {
@@ -412,17 +447,7 @@ void ac_renderer_create_tree(void) {
 	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-void ac_renderer_start_trees(void) {
-	glEnable(GL_TEXTURE_1D);
-
-	glBindTexture(GL_TEXTURE_1D, g_treeTex);
-	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].pos.f[0]);
-	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].st[0]);
-}
-
-void ac_renderer_add_tree(ac_tree_t *t) {
+void ac_renderer_add_trees(int numTrees, ac_tree_t *trees) {
 	static GLmatrix_t m = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -430,46 +455,80 @@ void ac_renderer_add_tree(ac_tree_t *t) {
 		1, 0, 0, 1
 	};
 	float c, s;
+	int i, j, x, z;
+	ac_tree_t *t;
+	ac_vec4_t bounds[2];
+	/*static const float inv = 1.f / (float)(1 << PROPMAP_SHIFT);
+	ac_vec4_t tmp;*/
 
-	// apply frustum culling
-	if (ac_renderer_cull_sphere(t->pos, t->Yscale))
-		return;
+	// make the necessary state changes
+	glEnable(GL_TEXTURE_1D);
+	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].pos.f[0]);
+	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].st[0]);
 
-	glPushMatrix();
+	for (i = 0; i < numTrees; i += (1 << PROPMAP_SHIFT)) {
+		t = trees + i;
+		// round the coordinates to multiples of (1 << PROPMAP_SHIFT)
+		/*x = ((int)t->pos.f[0]) >> PROPMAP_SHIFT << PROPMAP_SHIFT;
+		z = ((int)t->pos.f[2]) >> PROPMAP_SHIFT << PROPMAP_SHIFT;*/
+		/*tmp = ac_vec_mulf(t->pos, inv);
+		x = floorf(tmp.f[0]) * (1 << PROPMAP_SHIFT);
+		z = floorf(tmp.f[2]) * (1 << PROPMAP_SHIFT);*/
+		x = ((int)t->pos.f[0]) & (0xFFFFFFFF << PROPMAP_SHIFT);
+		z = ((int)t->pos.f[2]) & (0xFFFFFFFF << PROPMAP_SHIFT);
 
-	c = cosf(t->ang);
-	s = sinf(t->ang);
-	// column 1
-	m[0] = t->XZscale * c;
-	//m[1] = 0;
-	m[2] = t->XZscale * -s;
-	//m[3] = 0;
-	// column 2
-	//m[4] = 0;
-	m[5] = t->Yscale;
-	//m[6] = 0;
-	//m[7] = 0;
-	// column 3
-	m[8] = t->XZscale * s;
-	//m[9] = 0;
-	m[10] = t->XZscale * c;
-	//m[11] = 0;
-	// column 4
-	m[12] = t->pos.f[0];
-	m[13] = t->pos.f[1];
-	m[14] = t->pos.f[2];
-	//m[15] = 1;
-	glMultMatrixf(m);
+		// apply frustum culling
+		bounds[0] = ac_vec_set(x, 0, z, 0);
+		bounds[1] = ac_vec_set(
+			x + (1 << PROPMAP_SHIFT), 50, z + (1 << PROPMAP_SHIFT), 0);
+		if (ac_renderer_cull_bbox(bounds))
+			continue;
 
-	glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
-					&g_tree_indices[0]);
-	*g_vertCounter += TREE_BASE + 1;
-	*g_triCounter += TREE_BASE + 2;
+		for (j = 0; j < (1 << PROPMAP_SHIFT); j++, t++) {
+			// apply frustum culling
+			/*if (ac_renderer_cull_sphere(t->pos, t->Yscale))
+				continue;*/
 
-	glPopMatrix();
-}
+			glPushMatrix();
 
-void ac_renderer_start_bldgs(void) {
+			c = cosf(t->ang);
+			s = sinf(t->ang);
+			// column 1
+			m[0] = t->XZscale * c;
+			//m[1] = 0;
+			m[2] = t->XZscale * -s;
+			//m[3] = 0;
+			// column 2
+			//m[4] = 0;
+			m[5] = t->Yscale;
+			//m[6] = 0;
+			//m[7] = 0;
+			// column 3
+			m[8] = t->XZscale * s;
+			//m[9] = 0;
+			m[10] = t->XZscale * c;
+			//m[11] = 0;
+			// column 4
+			m[12] = t->pos.f[0];
+			m[13] = t->pos.f[1];
+			m[14] = t->pos.f[2];
+			//m[15] = 1;
+			glMultMatrixf(m);
+
+			glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
+							&g_tree_indices[0]);
+			*g_vertCounter += TREE_BASE + 1;
+			*g_triCounter += TREE_BASE + 2;
+
+			glPopMatrix();
+		}
+	}
+
+	// bring the previous state back
+
 	glDisable(GL_TEXTURE_1D);
 	glEnable(GL_TEXTURE_2D);
 }
@@ -517,9 +576,9 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	// set face culling
-	/*glCullFace(GL_BACK);
-	glFrontFace(GL_CCW);
-	glEnable(GL_CULL_FACE);*/
+	glCullFace(GL_BACK);
+	glFrontFace(GL_CW);
+	glEnable(GL_CULL_FACE);
 
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);

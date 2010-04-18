@@ -31,14 +31,7 @@ void ac_game_shutdown(void) {
 }
 
 void ac_game_draw_props(void) {
-	int i;
-
-	ac_renderer_start_trees();
-	for (i = 0; i < g_num_trees; i++)
-		ac_renderer_add_tree(&g_trees[i]);
-	ac_renderer_start_bldgs();
-	/*for (i = 0; i < g_num_bldgs; i++)
-		ac_renderer_add_bldg(&g_bldgs[i]);*/
+	ac_renderer_add_trees(g_num_trees, g_trees);
 }
 
 #define FLOATING_RADIUS		200.f

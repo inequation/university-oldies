@@ -72,7 +72,7 @@ typedef struct {
 #define PROPMAP_SIZE		(HEIGHTMAP_SIZE >> PROPMAP_SHIFT)
 #define TREE_COVERAGE		0.6
 #define BLDG_COVERAGE		0.1
-#define TREES_PER_FIELD		12
+#define TREES_PER_FIELD		50
 #define BLDGS_PER_FIELD		6
 
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
@@ -167,18 +167,14 @@ void ac_renderer_set_heightmap(uchar *hmap);
 /// \note				Must be called *before* \ref ac_renderer_finish3D
 void ac_renderer_start_scene(ac_viewpoint_t *vp);
 
-/// Puts the renderer into the tree rendering state - binds all the buffers once
-/// in order to speed up object instancing.
-void ac_renderer_start_trees(void);
-
 /// Adds a tree to the scene at the given position.
-void ac_renderer_add_tree(ac_tree_t *t);
-
-/// Puts the renderer into the building rendering state - binds all the buffers
-/// once in order to speed up object instancing.
-void ac_renderer_start_bldgs(void);
+/// \param numTrees		number of trees in the list
+/// \param trees		tree list
+void ac_renderer_add_trees(int numTrees, ac_tree_t *trees);
 
 /// Adds a building to the scene.
+/// \param numBldgs		number of buildings in the list
+/// \param bldgs		buildings list
 void ac_renderer_add_bldg(ac_bldg_t *b);
 
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
