@@ -5,8 +5,6 @@
 
 #include "ac130.h"
 
-const uchar	*g_hmap;
-
 int			g_num_trees;
 ac_tree_t	*g_trees;
 
@@ -15,8 +13,8 @@ ac_bldg_t	*g_bldgs;
 
 bool ac_game_init(void) {
 	// set new terrain heightmap
-	g_hmap = ac_gen_terrain(0xDEADBEEF);
-	ac_renderer_set_heightmap((uchar *)g_hmap);
+	ac_gen_terrain(0xDEADBEEF);
+	ac_renderer_set_heightmap();
 
 	// generate proplists
 	g_trees = malloc(sizeof(*g_trees) * MAX_NUM_TREES);

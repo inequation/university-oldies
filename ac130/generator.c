@@ -5,6 +5,8 @@
 
 #include "ac130.h"
 
+ac_prop_t		*g_proptree = NULL;
+
 /// Seed for the internal pseudorandom number generator.
 static uint		g_seed;
 
@@ -129,9 +131,9 @@ static void ac_gen_cloudmap(char *dst, int size) {
 		free(submaps[x]);
 }
 
-static uchar	g_heightmap[HEIGHTMAP_SIZE * HEIGHTMAP_SIZE];
+uchar			g_heightmap[HEIGHTMAP_SIZE * HEIGHTMAP_SIZE];
 
-const uchar *ac_gen_terrain(int seed) {
+void ac_gen_terrain(int seed) {
 	int x, y, xoff, yoff, pix;
 	char *cloudmap = malloc(sizeof(g_heightmap));
 	float freq = 0.005 + 0.000001 * (float)((ac_gen_rand() % 6000) - 3000);
@@ -177,8 +179,6 @@ const uchar *ac_gen_terrain(int seed) {
 	}
 
 	free(cloudmap);
-
-	return g_heightmap;
 }
 
 float ac_gen_sample_height(float x, float y) {
@@ -284,52 +284,67 @@ void ac_gen_propmap(void) {
 	}
 }
 
-void ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
+ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs, int x, int y, int step) {
-	int i, j, basex, basez;
+	int i;
 	float tx, tz;
+	ac_prop_t *node = malloc(sizeof(ac_prop_t));
 
-	if (step <= 1) {
-		for (i = 0; i < 4; i++) {
-			basex = x + (i & 1);
-			basez = y + (i > 1 ? 1 : 0);
-			switch (g_propmap[basez * PROPMAP_SIZE + basex]) {
-				case 0:
-					continue;
-				case 1:
-					for (j = 0; j < TREES_PER_FIELD; j++) {
-						tx = (basex << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
-							% ((1 << PROPMAP_SHIFT) * 100));
-						tz = (basez << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
-							% ((1 << PROPMAP_SHIFT) * 100));
-						trees[*numTrees].pos = ac_vec_set(
-							tx - HEIGHTMAP_SIZE * 0.5,
-							ac_gen_sample_height(tx, tz),
-							tz - HEIGHTMAP_SIZE * 0.5,
-							0);
-						trees[*numTrees].ang =
-							(ac_gen_rand() % 360) / 180.f * M_PI;
-						trees[*numTrees].XZscale =
-							0.6 + 0.001 * (ac_gen_rand() % 801);
-						trees[*numTrees].Yscale =
-							1.6 + 0.001 * (ac_gen_rand() % 1601);
-						(*numTrees)++;
-					}
-				case 2:
-					continue;
-			}
+	memset(node, 0, sizeof(*node));
+
+	node->bounds[0] = ac_vec_set(
+		(x << PROPMAP_SHIFT) - HEIGHTMAP_SIZE / 2,
+		0,
+		(y << PROPMAP_SHIFT) - HEIGHTMAP_SIZE / 2,
+		0);
+	node->bounds[1] = ac_vec_set(
+		((x + step * 2) << PROPMAP_SHIFT) - HEIGHTMAP_SIZE / 2,
+		HEIGHT,
+		((y + step * 2) << PROPMAP_SHIFT) - HEIGHTMAP_SIZE / 2,
+		0);
+
+	if (step < 1) {
+		switch (g_propmap[y * PROPMAP_SIZE + x]) {
+			case 0:
+				break;
+			case 1:
+				node->trees = &trees[*numTrees];
+				//node->bldgs = NULL;
+				for (i = 0; i < TREES_PER_FIELD; i++) {
+					tx = (x << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+						% ((1 << PROPMAP_SHIFT) * 100));
+					tz = (y << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+						% ((1 << PROPMAP_SHIFT) * 100));
+					trees[i + *numTrees].pos = ac_vec_set(
+						tx - HEIGHTMAP_SIZE * 0.5,
+						ac_gen_sample_height(tx, tz),
+						tz - HEIGHTMAP_SIZE * 0.5,
+						0);
+					trees[i + *numTrees].ang =
+						(ac_gen_rand() % 360) / 180.f * M_PI;
+					trees[i + *numTrees].XZscale =
+						0.6 + 0.001 * (ac_gen_rand() % 801);
+					trees[i + *numTrees].Yscale =
+						1.6 + 0.001 * (ac_gen_rand() % 1601);
+				}
+				(*numTrees) += TREES_PER_FIELD;
+				break;
+			case 2:
+				break;
 		}
-		return;
+	} else {
+		/*node->trees = NULL;
+		node->bldgs = NULL;*/
+		node->child[0] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+								x, y, step / 2);
+		node->child[1] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+								x + step, y, step / 2);
+		node->child[2] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+								x, y + step, step / 2);
+		node->child[3] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+								x + step, y + step, step / 2);
 	}
-
-	ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
-							x, y, step / 2);
-	ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
-							x + step, y, step / 2);
-	ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
-							x, y + step, step / 2);
-	ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
-							x + step, y + step, step / 2);
+	return node;
 }
 
 void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
@@ -346,7 +361,7 @@ void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
 	ac_gen_propmap();
 
 	// use the propmap to place the actual objects
-#if 1
+#if 0
 	for (basey = 0; basey < PROPMAP_SIZE; basey++) {
 		for (basex = 0; basex < PROPMAP_SIZE; basex++) {
 			switch (g_propmap[basey * PROPMAP_SIZE + basex]) {
@@ -379,9 +394,23 @@ void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
 		}
 	}
 #else
-	ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+	g_proptree = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 							0, 0, PROPMAP_SIZE / 2);
 #endif
 
 	free(g_propmap);
+}
+
+void ac_gen_free_proptree(ac_prop_t *n) {
+	if (n == NULL)
+		n = g_proptree;
+	// it's enough to just check the existence of the 1st child because a node
+	// will always either have 4 children or none
+	if (n->trees == NULL && n->bldgs == NULL && n->child[0] != NULL) {
+		ac_gen_free_proptree(n->child[0]);
+		ac_gen_free_proptree(n->child[1]);
+		ac_gen_free_proptree(n->child[2]);
+		ac_gen_free_proptree(n->child[3]);
+	}
+	free(n);
 }

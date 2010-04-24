@@ -12,10 +12,15 @@
 // convenience define for a GL 4x4 matrix
 typedef GLfloat	GLmatrix_t[16];
 
+typedef enum {
+	CR_OUTSIDE,
+	CR_INSIDE,
+	CR_INTERSECT
+} cullResult_t;
+
 SDL_Surface	*g_screen;
 
 // terrain resources
-uchar		*g_heightmap = NULL;
 GLuint		g_hmapTex;
 ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
@@ -42,7 +47,7 @@ void ac_renderer_set_frustum(ac_vec4_t pos,
 	ac_vec4_t v1, v2;
 
 	// culling debug (look straight down to best see it at work)
-#if 0
+#if 1
 	x *= 0.5;
 	y *= 0.5;
 #endif
@@ -101,12 +106,12 @@ bool ac_renderer_cull_sphere(ac_vec4_t p, float radius) {
 	return false;
 }
 
-bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
+cullResult_t ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
 	// set to 0 for the slow, naive implementation
 #if 1
 	ac_vec4_t v;
 	int i, x, y, z;
-	//bool intersect = false;
+	bool intersect = false;
 
 	for (i = 0; i < 6; i++) {
 		// floating point magic! extract the sign bits
@@ -123,18 +128,17 @@ bool ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
 				0);
 		if (ac_vec_dot(v, g_frustum[i]) < g_frustum[i].f[3])
 			// negative far point behind plane -> box outside frustum
-			return true;
+			return CR_OUTSIDE;
 		// test the positive far point against the plane
 		v = ac_vec_set(
 				bounds[x].f[0],
 				bounds[y].f[1],
 				bounds[z].f[2],
 				0);
-		/*if (ac_vec_dot(v, g_frustum[i]) < g_frustum[i].f[3])
-			intersect = true;*/
+		if (ac_vec_dot(v, g_frustum[i]) < g_frustum[i].f[3])
+			intersect = true;
 	}
-	//if (!intersect)
-		return false;
+	return intersect ? CR_INTERSECT : CR_INSIDE;
 #else
 	int i, j;
 	ac_vec4_t points[8];
@@ -361,10 +365,10 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 					(minV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
 	bounds[1] = ac_vec_set((maxU - 0.5) * HEIGHTMAP_SIZE,
-					50,
+					HEIGHT,
 					(maxV - 0.5) * HEIGHTMAP_SIZE,
 					0.f);
-	if (ac_renderer_cull_bbox(bounds)) {
+	if (ac_renderer_cull_bbox(bounds) == CR_OUTSIDE) {
 		(*g_culledPatchCounter)++;
 		return;
 	}
@@ -404,7 +408,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	// debug coordinate system triangle
 	//glLoadIdentity();
 	glPushMatrix();
-	glTranslatef(0, 50, 0);
+	glTranslatef(0, HEIGHT, 0);
 	glBegin(GL_TRIANGLES);
 	glColor3f(1, 0, 0);
 	glVertex3f(10, 0, 0);
@@ -447,7 +451,103 @@ void ac_renderer_create_tree(void) {
 	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
+void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
+	static GLmatrix_t m = {
+		1, 0, 0, 0,
+		0, 1, 0, 0,
+		0, 0, 1, 0,
+		1, 0, 0, 1
+	};
+	int i;
+	float c, s;
+	ac_tree_t *t;
+	ac_bldg_t *b;
+
+	if (node->trees != NULL) {
+		for (t = node->trees, i = 0; i < TREES_PER_FIELD; i++, t++) {
+			glPushMatrix();
+
+			c = cosf(t->ang);
+			s = sinf(t->ang);
+			// column 1
+			m[0] = t->XZscale * c;
+			//m[1] = 0;
+			m[2] = t->XZscale * -s;
+			//m[3] = 0;
+			// column 2
+			//m[4] = 0;
+			m[5] = t->Yscale;
+			//m[6] = 0;
+			//m[7] = 0;
+			// column 3
+			m[8] = t->XZscale * s;
+			//m[9] = 0;
+			m[10] = t->XZscale * c;
+			//m[11] = 0;
+			// column 4
+			m[12] = t->pos.f[0];
+			m[13] = t->pos.f[1];
+			m[14] = t->pos.f[2];
+			//m[15] = 1;
+			glMultMatrixf(m);
+
+			glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
+							&g_tree_indices[0]);
+			*g_vertCounter += TREE_BASE + 1;
+			*g_triCounter += TREE_BASE + 2;
+
+			glPopMatrix();
+		}
+	} else if (node->bldgs != NULL) {
+	} else if (node->child[0] != NULL) {
+		// it's enough to just check the existence of the 1st child because a
+		// node will always either have 4 children or none
+		ac_renderer_recurse_proptree_drawall(node->child[0]);
+		ac_renderer_recurse_proptree_drawall(node->child[1]);
+		ac_renderer_recurse_proptree_drawall(node->child[2]);
+		ac_renderer_recurse_proptree_drawall(node->child[3]);
+	}
+}
+
+void ac_renderer_recurse_proptree(ac_prop_t *node, int step) {
+	if (step < 1) {
+		ac_renderer_recurse_proptree_drawall(node);
+		return;
+	}
+	switch (ac_renderer_cull_bbox(node->bounds)) {
+		case CR_OUTSIDE:
+			// don't quit if not deep enough into the tree
+			//if (step < PROPMAP_SIZE / 2)
+				return;
+			// intentional fallthrough!
+		case CR_INSIDE:
+			ac_renderer_recurse_proptree_drawall(node);
+			break;
+		case CR_INTERSECT:
+			step /= 2;
+			ac_renderer_recurse_proptree(node->child[0], step);
+			ac_renderer_recurse_proptree(node->child[1], step);
+			ac_renderer_recurse_proptree(node->child[2], step);
+			ac_renderer_recurse_proptree(node->child[3], step);
+			break;
+	}
+}
+
+void ac_renderer_draw_props(void) {
+	// make the necessary state changes
+	glEnable(GL_TEXTURE_1D);
+	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].pos.f[0]);
+	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
+					&g_tree_verts[0].st[0]);
+
+	ac_renderer_recurse_proptree(g_proptree, PROPMAP_SIZE / 2);
+}
+
 void ac_renderer_add_trees(int numTrees, ac_tree_t *trees) {
+	return;
+
 	static GLmatrix_t m = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -483,8 +583,8 @@ void ac_renderer_add_trees(int numTrees, ac_tree_t *trees) {
 		// apply frustum culling
 		bounds[0] = ac_vec_set(x, 0, z, 0);
 		bounds[1] = ac_vec_set(
-			x + (1 << PROPMAP_SHIFT), 50, z + (1 << PROPMAP_SHIFT), 0);
-		if (ac_renderer_cull_bbox(bounds))
+			x + (1 << PROPMAP_SHIFT), HEIGHT, z + (1 << PROPMAP_SHIFT), 0);
+		if (ac_renderer_cull_bbox(bounds) == CR_OUTSIDE)
 			continue;
 
 		for (j = 0; j < (1 << PROPMAP_SHIFT); j++, t++) {
@@ -595,16 +695,18 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 }
 
 void ac_renderer_shutdown(void) {
+	// FIXME: move to somewhere more appropriate
+	ac_gen_free_proptree(NULL);
+
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_treeTex);
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }
 
-void ac_renderer_set_heightmap(uchar *hmap) {
+void ac_renderer_set_heightmap(void) {
 	if (g_heightmap != NULL)
 		glDeleteTextures(1, &g_hmapTex);
-	g_heightmap = hmap;
 	glGenTextures(1, &g_hmapTex);
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 
@@ -687,6 +789,9 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 
 	// draw terrain
 	ac_renderer_draw_terrain(vp->origin);
+
+	// draw props
+	ac_renderer_draw_props();
 }
 
 void ac_renderer_finish_3D(void) {

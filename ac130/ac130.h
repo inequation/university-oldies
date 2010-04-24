@@ -45,6 +45,17 @@ typedef struct {
 										/// otherwise a flat one
 } ac_bldg_t;
 
+/// Prop tree node structure.
+typedef struct ac_prop_s {
+	ac_vec4_t				bounds[2];	/// 2 points describing the AABB (axis-
+										/// aligned bounding box) of the node
+	struct ac_prop_s		*child[4];	/// pointers to children nodes
+	ac_tree_t				*trees;		/// tree array (NULL if node is a branch
+										/// or a building prop leaf)
+	ac_bldg_t				*bldgs;		/// building array (NULL if node is a
+										/// branch or a tree prop leaf)
+} ac_prop_t;
+
 /// Viewpoint definition structure.
 typedef struct {
 	ac_vec4_t	origin;		/// camera position
@@ -63,7 +74,8 @@ typedef struct {
 // =========================================================
 
 #define HEIGHTMAP_SIZE		1024
-#define HEIGHT_SCALE		(50.f / 255.f)
+#define HEIGHT				50.f
+#define HEIGHT_SCALE		(HEIGHT / 255.f)
 
 #define TREE_BASE			7
 #define TREE_TEXTURE_SIZE	64
@@ -80,13 +92,16 @@ typedef struct {
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
 
+extern uchar				g_heightmap[];
+extern ac_prop_t			*g_proptree;
+
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it
 ///						should not be freed.
 /// \return				constant pointer to the heightmap
 /// \param seed			random number seed; ensures identical random number
 ///						sequence each run
-const uchar *ac_gen_terrain(int seed);
+void ac_gen_terrain(int seed);
 
 /// Generates tree resources.
 /// \note				All the resources are stored in heap memory, therefore
@@ -161,7 +176,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 void ac_renderer_shutdown(void);
 
 /// Sets new terrain heightmap.
-void ac_renderer_set_heightmap(uchar *hmap);
+void ac_renderer_set_heightmap();
 
 /// Starts the rendering of the next frame. Also sts the point of view.
 /// \note				Must be called *before* \ref ac_renderer_finish3D
