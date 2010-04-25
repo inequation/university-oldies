@@ -4,6 +4,9 @@
 // Renderer module
 
 #include "ac130.h"
+#ifdef WIN32	// enable static linking on win32
+	#define GLEW_STATIC
+#endif // WIN32
 #include <GL/glew.h>
 #define NO_SDL_GLEXT	// GLEW takes care of extensions
 #include <SDL/SDL_opengl.h>
