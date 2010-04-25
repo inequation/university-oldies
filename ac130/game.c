@@ -28,10 +28,6 @@ void ac_game_shutdown(void) {
 	free(g_bldgs);
 }
 
-void ac_game_draw_props(void) {
-	ac_renderer_add_trees(g_num_trees, g_trees);
-}
-
 #define FLOATING_RADIUS		200.f
 #define TIME_SCALE			0.04
 #define MOUSE_SCALE			0.001
@@ -53,8 +49,8 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		vp.angles[0] = -plane_angle + M_PI * 0.2;
 	else if (vp.angles[0] > -plane_angle + M_PI * 0.8)
 		vp.angles[0] = -plane_angle + M_PI * 0.8;
-	if (vp.angles[1] > M_PI * -0.125)
-		vp.angles[1] = M_PI * -0.125;
+	if (vp.angles[1] > M_PI * -0.165)
+		vp.angles[1] = M_PI * -0.165;
 	else if (vp.angles[1] < M_PI * -0.45)
 		vp.angles[1] = M_PI * -0.45;
 #else
@@ -72,9 +68,6 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	vp.origin = ac_vec_add(tmp, vp.origin);
 	vp.fov = M_PI * 0.12;//20.f / 180.f * M_PI;
 	ac_renderer_start_scene(&vp);
-
-	ac_game_draw_props();
-
 	ac_renderer_finish_3D();
 	ac_renderer_composite(false);
 }

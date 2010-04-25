@@ -9,6 +9,7 @@
 // some includes shared by all the modules
 #include <stdlib.h>
 #include <stdbool.h>
+#include <float.h>
 #include <SDL/SDL.h>
 #include <assert.h>
 
@@ -87,6 +88,8 @@ typedef struct {
 #define TREES_PER_FIELD		50
 #define BLDGS_PER_FIELD		6
 
+#define PROP_LOD_DISTANCE	100.f
+
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
@@ -161,7 +164,7 @@ void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
 									)	// + 2 degenerate triangles
 #define TERRAIN_NUM_INDICES			(TERRAIN_NUM_BODY_INDICES				\
 										+ TERRAIN_NUM_SKIRT_INDICES)
-#define TERRAIN_LOD					50.f
+#define TERRAIN_LOD					40.f
 
 /// Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)

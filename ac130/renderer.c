@@ -26,11 +26,16 @@ ac_vertex_t	g_ter_verts[TERRAIN_NUM_VERTS];
 ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
 
-// tree resources
-ac_vertex_t	g_tree_verts[TREE_BASE + 1];
-uchar		g_tree_indices[TREE_BASE + 2];
+// prop resources
+ac_vertex_t	g_tree_verts[TREE_BASE + 1			// LOD 0
+							+ TREE_BASE - 2		// LOD 1
+							+ TREE_BASE - 4];	// LOD 2
+uchar		g_tree_indices[TREE_BASE + 2		// LOD 0
+							+ TREE_BASE			// LOD 1
+							+ TREE_BASE - 2];	// LOD 2
 uchar		g_tree_texture[TREE_TEXTURE_SIZE];
 GLuint		g_treeTex;
+uint		g_propVBOs[2];
 
 // counters for measuring performance
 uint		*g_triCounter;
@@ -41,13 +46,15 @@ uint		*g_culledPatchCounter;
 // frustum planes
 ac_vec4_t	g_frustum[6];
 
+ac_vec4_t	g_viewpoint;
+
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
 							float x, float y, float zNear, float zFar) {
 	ac_vec4_t v1, v2;
 
 	// culling debug (look straight down to best see it at work)
-#if 1
+#if 0
 	x *= 0.5;
 	y *= 0.5;
 #endif
@@ -107,8 +114,6 @@ bool ac_renderer_cull_sphere(ac_vec4_t p, float radius) {
 }
 
 cullResult_t ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
-	// set to 0 for the slow, naive implementation
-#if 1
 	ac_vec4_t v;
 	int i, x, y, z;
 	bool intersect = false;
@@ -139,36 +144,6 @@ cullResult_t ac_renderer_cull_bbox(ac_vec4_t bounds[2]) {
 			intersect = true;
 	}
 	return intersect ? CR_INTERSECT : CR_INSIDE;
-#else
-	int i, j;
-	ac_vec4_t points[8];
-	bool front, back, anyBack = false;
-
-	// fill the points to check
-	for (i = 0; i < 8; i++) {
-		points[i] = ac_vec_set(bounds[i & 1].f[0],
-								bounds[(i >> 1) & 1].f[1],
-								bounds[(i >> 2) & 1].f[2],
-								0.f);
-	}
-
-	for (i = 0; i < 6; i++) {
-		front = back = false;
-		for (j = 0; j < 8; j++) {
-			if (ac_vec_dot(points[j], g_frustum[i]) > g_frustum[i].f[3]) {
-				front = true;
-				if (back)
-					break;		// a point is in front
-			} else
-				back = true;
-		}
-		if (!front)
-			// all points were behind one of the planes
-			return true;
-		anyBack |= back;
-	}
-	return false;
-#endif
 }
 
 void ac_renderer_fill_terrain_indices(void) {
@@ -351,8 +326,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	glPopMatrix();
 }
 
-void ac_renderer_recurse_terrain(ac_vec4_t cam,
-								float minU, float minV,
+void ac_renderer_recurse_terrain(float minU, float minV,
 								float maxU, float maxV,
 								int level, float scale) {
 	ac_vec4_t v, bounds[2];
@@ -381,7 +355,7 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 				128.f,
 				(halfV - 0.5) * (float)HEIGHTMAP_SIZE,
 				0.f);
-	v = ac_vec_sub(v, cam);
+	v = ac_vec_sub(v, g_viewpoint);
 
 	// use distances squared
 	float f2 = ac_vec_dot(v, v) / d2;
@@ -390,18 +364,18 @@ void ac_renderer_recurse_terrain(ac_vec4_t cam,
 		ac_renderer_terrain_patch(minU, minV, scale, level);
 	else {
 		scale *= 0.5;
-		ac_renderer_recurse_terrain(cam, minU, minV, halfU, halfV, level - 1,
+		ac_renderer_recurse_terrain(minU, minV, halfU, halfV, level - 1,
 									scale);
-		ac_renderer_recurse_terrain(cam, halfU, minV, maxU, halfV, level - 1,
+		ac_renderer_recurse_terrain(halfU, minV, maxU, halfV, level - 1,
 									scale);
-		ac_renderer_recurse_terrain(cam, minU, halfV, halfU, maxV, level - 1,
+		ac_renderer_recurse_terrain(minU, halfV, halfU, maxV, level - 1,
 									scale);
-		ac_renderer_recurse_terrain(cam, halfU, halfV, maxU, maxV, level - 1,
+		ac_renderer_recurse_terrain(halfU, halfV, maxU, maxV, level - 1,
 									scale);
 	}
 }
 
-void ac_renderer_draw_terrain(ac_vec4_t cam) {
+void ac_renderer_draw_terrain() {
 	glPushMatrix();
 
 #if 0
@@ -428,8 +402,7 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 
 	// traverse the quadtree
-	ac_renderer_recurse_terrain(cam,
-								0.f, 0.f, 1.f, 1.f,
+	ac_renderer_recurse_terrain(0.f, 0.f, 1.f, 1.f,
 								g_ter_maxLevels, 1.f);
 
 	glDisable(GL_TEXTURE_2D);
@@ -439,6 +412,8 @@ void ac_renderer_draw_terrain(ac_vec4_t cam) {
 
 void ac_renderer_create_tree(void) {
 	ac_gen_tree(g_tree_texture, g_tree_verts, g_tree_indices);
+
+	// generate texture
 	glGenTextures(1, &g_treeTex);
 	glBindTexture(GL_TEXTURE_1D, g_treeTex);
 
@@ -449,6 +424,18 @@ void ac_renderer_create_tree(void) {
 	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	// generate VBOs
+	glGenBuffers(2, g_propVBOs);
+	glBindBuffer(GL_ARRAY_BUFFER, g_propVBOs[0]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_propVBOs[1]);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(g_tree_verts), g_tree_verts, GL_STATIC_DRAW);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+		sizeof(g_tree_indices), g_tree_indices, GL_STATIC_DRAW);
+	// unbind VBOs
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
 void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
@@ -458,12 +445,29 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 		0, 0, 1, 0,
 		1, 0, 0, 1
 	};
-	int i;
-	float c, s;
-	ac_tree_t *t;
-	ac_bldg_t *b;
 
 	if (node->trees != NULL) {
+		int i;
+		float c, s, d2;
+		ac_tree_t *t;
+		int ofs, num;
+		// pick level of detail
+		ac_vec4_t l = ac_vec_mulf(
+			ac_vec_add(node->bounds[0], node->bounds[1]), 0.5);
+		l = ac_vec_sub(l, g_viewpoint);
+		d2 = ac_vec_dot(l, l);
+
+		if (d2 < PROP_LOD_DISTANCE * PROP_LOD_DISTANCE) {
+			ofs = 0;
+			num = TREE_BASE + 2;
+		} else if (d2 < PROP_LOD_DISTANCE * PROP_LOD_DISTANCE * 4) {
+			ofs = TREE_BASE + 2;
+			num = TREE_BASE;
+		} else {
+			ofs = TREE_BASE + 2 + TREE_BASE;
+			num = TREE_BASE - 2;
+		}
+
 		for (t = node->trees, i = 0; i < TREES_PER_FIELD; i++, t++) {
 			glPushMatrix();
 
@@ -485,16 +489,16 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 			m[10] = t->XZscale * c;
 			//m[11] = 0;
 			// column 4
-			m[12] = t->pos.f[0];
+			/*m[12] = t->pos.f[0];
 			m[13] = t->pos.f[1];
 			m[14] = t->pos.f[2];
-			//m[15] = 1;
+			//m[15] = 1;*/
+			ac_vec_tofloat(t->pos, &m[12]);
 			glMultMatrixf(m);
 
-			glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
-							&g_tree_indices[0]);
-			*g_vertCounter += TREE_BASE + 1;
-			*g_triCounter += TREE_BASE + 2;
+			glDrawElements(GL_TRIANGLE_FAN, num, GL_UNSIGNED_BYTE, (void *)ofs);
+			*g_vertCounter += num - 1;
+			*g_triCounter += num - 2;
 
 			glPopMatrix();
 		}
@@ -516,10 +520,7 @@ void ac_renderer_recurse_proptree(ac_prop_t *node, int step) {
 	}
 	switch (ac_renderer_cull_bbox(node->bounds)) {
 		case CR_OUTSIDE:
-			// don't quit if not deep enough into the tree
-			//if (step < PROPMAP_SIZE / 2)
-				return;
-			// intentional fallthrough!
+			return;
 		case CR_INSIDE:
 			ac_renderer_recurse_proptree_drawall(node);
 			break;
@@ -537,98 +538,18 @@ void ac_renderer_draw_props(void) {
 	// make the necessary state changes
 	glEnable(GL_TEXTURE_1D);
 	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+	glBindBuffer(GL_ARRAY_BUFFER, g_propVBOs[0]);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_propVBOs[1]);
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].pos.f[0]);
+					(void *)offsetof(ac_vertex_t, pos.f[0]));
 	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].st[0]);
+					(void *)offsetof(ac_vertex_t, st[0]));
 
 	ac_renderer_recurse_proptree(g_proptree, PROPMAP_SIZE / 2);
-}
-
-void ac_renderer_add_trees(int numTrees, ac_tree_t *trees) {
-	return;
-
-	static GLmatrix_t m = {
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		1, 0, 0, 1
-	};
-	float c, s;
-	int i, j, x, z;
-	ac_tree_t *t;
-	ac_vec4_t bounds[2];
-	/*static const float inv = 1.f / (float)(1 << PROPMAP_SHIFT);
-	ac_vec4_t tmp;*/
-
-	// make the necessary state changes
-	glEnable(GL_TEXTURE_1D);
-	glBindTexture(GL_TEXTURE_1D, g_treeTex);
-	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].pos.f[0]);
-	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
-					&g_tree_verts[0].st[0]);
-
-	for (i = 0; i < numTrees; i += (1 << PROPMAP_SHIFT)) {
-		t = trees + i;
-		// round the coordinates to multiples of (1 << PROPMAP_SHIFT)
-		/*x = ((int)t->pos.f[0]) >> PROPMAP_SHIFT << PROPMAP_SHIFT;
-		z = ((int)t->pos.f[2]) >> PROPMAP_SHIFT << PROPMAP_SHIFT;*/
-		/*tmp = ac_vec_mulf(t->pos, inv);
-		x = floorf(tmp.f[0]) * (1 << PROPMAP_SHIFT);
-		z = floorf(tmp.f[2]) * (1 << PROPMAP_SHIFT);*/
-		x = ((int)t->pos.f[0]) & (0xFFFFFFFF << PROPMAP_SHIFT);
-		z = ((int)t->pos.f[2]) & (0xFFFFFFFF << PROPMAP_SHIFT);
-
-		// apply frustum culling
-		bounds[0] = ac_vec_set(x, 0, z, 0);
-		bounds[1] = ac_vec_set(
-			x + (1 << PROPMAP_SHIFT), HEIGHT, z + (1 << PROPMAP_SHIFT), 0);
-		if (ac_renderer_cull_bbox(bounds) == CR_OUTSIDE)
-			continue;
-
-		for (j = 0; j < (1 << PROPMAP_SHIFT); j++, t++) {
-			// apply frustum culling
-			/*if (ac_renderer_cull_sphere(t->pos, t->Yscale))
-				continue;*/
-
-			glPushMatrix();
-
-			c = cosf(t->ang);
-			s = sinf(t->ang);
-			// column 1
-			m[0] = t->XZscale * c;
-			//m[1] = 0;
-			m[2] = t->XZscale * -s;
-			//m[3] = 0;
-			// column 2
-			//m[4] = 0;
-			m[5] = t->Yscale;
-			//m[6] = 0;
-			//m[7] = 0;
-			// column 3
-			m[8] = t->XZscale * s;
-			//m[9] = 0;
-			m[10] = t->XZscale * c;
-			//m[11] = 0;
-			// column 4
-			m[12] = t->pos.f[0];
-			m[13] = t->pos.f[1];
-			m[14] = t->pos.f[2];
-			//m[15] = 1;
-			glMultMatrixf(m);
-
-			glDrawElements(GL_TRIANGLE_FAN, TREE_BASE + 2, GL_UNSIGNED_BYTE,
-							&g_tree_indices[0]);
-			*g_vertCounter += TREE_BASE + 1;
-			*g_triCounter += TREE_BASE + 2;
-
-			glPopMatrix();
-		}
-	}
-
 	// bring the previous state back
 
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 	glDisable(GL_TEXTURE_1D);
 	glEnable(GL_TEXTURE_2D);
 }
@@ -664,8 +585,14 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	// initialize the extension wrangler
 	glewInit();
 	// check for required features
-	if (!GLEW_EXT_framebuffer_object)
+	if (!GLEW_EXT_framebuffer_object) {
+		fprintf(stderr, "Hardware does not support frame buffer objects\n");
 		return false;
+	}
+	if (!GLEW_ARB_vertex_buffer_object) {
+		fprintf(stderr, "Hardware does not support vertex buffer objects\n");
+		return false;
+	}
 
 	// all geometry uses vertex and index arrays
 	glEnableClientState(GL_VERTEX_ARRAY);
@@ -698,6 +625,8 @@ void ac_renderer_shutdown(void) {
 	// FIXME: move to somewhere more appropriate
 	ac_gen_free_proptree(NULL);
 
+	glDeleteBuffers(2, g_propVBOs);
+
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_treeTex);
 	// close SDL down
@@ -726,10 +655,12 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 		0, 0, 1, 0,	// 8
 		0, 0, 0, 1	// 12
 	};
-	double zNear = 0.1, zFar = 1000.0;
+	double zNear = 0.1, zFar = 800.0;
 	double x, y;
 	float cy, cp, sy, sp;
 	ac_vec4_t fwd, right, up;
+
+	g_viewpoint = vp->origin;
 
 	// clear buffers
 	//glClearColor(0.f, 0.75f, 1.f, 1.f);
@@ -788,7 +719,7 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 	ac_renderer_set_frustum(vp->origin, fwd, right, up, x, y, zNear, zFar);
 
 	// draw terrain
-	ac_renderer_draw_terrain(vp->origin);
+	ac_renderer_draw_terrain();
 
 	// draw props
 	ac_renderer_draw_props();

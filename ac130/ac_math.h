@@ -5,9 +5,15 @@
 #define AC_MATH_H
 
 #include <math.h>
+
+// general math
+#define MIN(a, b)			((a) < (b) ? (a) : (b))
+#define MAX(a, b)			((a) > (b) ? (a) : (b))
+
+// vector math
+
 // SSE intrinsics headers
 #include <xmmintrin.h>
-#include <emmintrin.h>
 
 #ifdef __GNUC__
 	#define ALIGNED_16	__attribute__ ((__aligned__ (16)))
