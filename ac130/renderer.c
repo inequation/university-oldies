@@ -430,7 +430,7 @@ void ac_renderer_create_props(void) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	// generate VBOs
-	glGenBuffers(2, g_propVBOs);
+	glGenBuffersARB(2, g_propVBOs);
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_propVBOs[0]);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_propVBOs[1]);
 	glBufferDataARB(GL_ARRAY_BUFFER_ARB,
@@ -659,7 +659,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);
 	glFogfv(GL_FOG_COLOR, fogcolour);
-	glFogf(GL_FOG_DENSITY, 0.003);
+	glFogf(GL_FOG_DENSITY, 0.0025);
 
 	// generate resources
 	ac_renderer_fill_terrain_indices();
