@@ -26,24 +26,31 @@ typedef unsigned int	uint;
 
 /// Tree prop structure.
 typedef struct {
-	ac_vec4_t				pos;		/// position at which to spawn the tree
-	float					ang;		/// orientation (rotation around the Y
-										/// axis) of the tree
-	float					XZscale;	/// horizontal scale factor of the tree
-	float					Yscale;		/// vertical scale factor of the tree
+	/// position at which to spawn the tree
+	ac_vec4_t				pos;
+	/// orientation (rotation around the Y axis) of the tree
+	float					ang;
+	/// horizontal scale factor of the tree
+	float					XZscale;
+	/// vertical scale factor of the tree
+	float					Yscale;
 } ac_tree_t;
 
 /// Building prop structure.
 typedef struct {
-	ac_vec4_t				pos;		/// position of the building's origin
-	float					ang;		/// orientation (rotation around the Y
-										/// axis) of the tree
-	float					Xscale;		/// horiz. X scale factor of the tree
-	float					Yscale;		/// horiz. Z scale factor of the tree
-	float					Zscale;		/// vertical scale factor of the tree
-	bool					slantedRoof;/// "architectural" setting - if true,
-										/// adds a building with a slanted roof,
-										/// otherwise a flat one
+	/// position of the building's origin
+	ac_vec4_t				pos;
+	/// orientation (rotation around the Y axis) of the building
+	float					ang;
+	/// horiz. X scale factor of the building
+	float					Xscale;
+	/// horiz. Z scale factor of the building
+	float					Yscale;
+	/// vertical scale factor of the building
+	float					Zscale;
+	/// "architectural" setting - if true, adds a building with a slanted roof,
+	/// otherwise a flat one
+	bool					slantedRoof;
 } ac_bldg_t;
 
 /// Prop tree node structure.
@@ -79,16 +86,20 @@ typedef struct {
 #define HEIGHT_SCALE		(HEIGHT / 255.f)
 
 #define TREE_BASE			7
-#define TREE_TEXTURE_SIZE	64
+#define BLDG_FLAT_VERTS		8
+#define BLDG_FLAT_INDICES	16
+#define BLDG_SLNT_VERTS		10
+#define BLDG_SLNT_INDICES	28
+#define PROP_TEXTURE_SIZE	64
 
 #define PROPMAP_SHIFT		4
 #define PROPMAP_SIZE		(HEIGHTMAP_SIZE >> PROPMAP_SHIFT)
 #define TREE_COVERAGE		0.6
 #define BLDG_COVERAGE		0.1
-#define TREES_PER_FIELD		50
-#define BLDGS_PER_FIELD		6
+#define TREES_PER_FIELD		25
+#define BLDGS_PER_FIELD		1
 
-#define PROP_LOD_DISTANCE	100.f
+#define PROP_LOD_DISTANCE	200.f
 
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
@@ -106,29 +117,11 @@ extern ac_prop_t			*g_proptree;
 ///						sequence each run
 void ac_gen_terrain(int seed);
 
-/// Generates tree resources.
-/// \note				All the resources are stored in heap memory, therefore
-///						freeing it is the client's responsibility.
+/// Generates props (trees, buildings) resources.
 /// \param texture		texture byte array
 /// \param verts		vertex array
 /// \param indices		index array
-void ac_gen_tree(uchar *texture, ac_vertex_t *verts, uchar *indices);
-
-/// Generates unit-size (1x1x1) building resources.
-/// \note				All the resources are stored in heap memory, therefore
-///						freeing it is the client's responsibility.
-/// \param texture		texture pointer address
-/// \param flatVerts	vertex array pointer address for the flat roof building
-///						variant
-/// \param flatIndices	index array pointer address for the flat roof building
-///						variant
-/// \param slantedVerts	vertex array pointer address for the slanted roof
-///						building variant
-/// \param slantedIndices	index array pointer address for the slanted roof
-///						building variant
-void ac_gen_buildings(uchar **texture,
-					ac_vertex_t **flatVerts, int **flatIndices,
-					ac_vertex_t **slantedVerts, int **slantedIndices);
+void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
 /// Generates prop (tree and buildings) lists.
 /// \note				Both trees and bldgs must be preallocated by the caller.

@@ -30,14 +30,18 @@ ushort		g_ter_indices[TERRAIN_NUM_INDICES];
 int			g_ter_maxLevels;
 
 // prop resources
-ac_vertex_t	g_tree_verts[TREE_BASE + 1			// LOD 0
+ac_vertex_t	g_prop_verts[TREE_BASE + 1			// LOD 0
 							+ TREE_BASE - 2		// LOD 1
-							+ TREE_BASE - 4];	// LOD 2
-uchar		g_tree_indices[TREE_BASE + 2		// LOD 0
+							+ TREE_BASE - 4		// LOD 2
+							+ BLDG_FLAT_VERTS
+							+ BLDG_SLNT_VERTS];
+uchar		g_prop_indices[TREE_BASE + 2		// LOD 0
 							+ TREE_BASE			// LOD 1
-							+ TREE_BASE - 2];	// LOD 2
-uchar		g_tree_texture[TREE_TEXTURE_SIZE];
-GLuint		g_treeTex;
+							+ TREE_BASE - 2		// LOD 2
+							+ BLDG_FLAT_INDICES
+							+ BLDG_SLNT_INDICES];
+uchar		g_prop_texture[PROP_TEXTURE_SIZE * PROP_TEXTURE_SIZE];
+GLuint		g_propTex;
 uint		g_propVBOs[2];
 
 // counters for measuring performance
@@ -401,44 +405,41 @@ void ac_renderer_draw_terrain() {
 	// centre the terrain
 	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
 
-	glEnable(GL_TEXTURE_2D);
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 
 	// traverse the quadtree
 	ac_renderer_recurse_terrain(0.f, 0.f, 1.f, 1.f,
 								g_ter_maxLevels, 1.f);
 
-	glDisable(GL_TEXTURE_2D);
-
 	glPopMatrix();
 }
 
-void ac_renderer_create_tree(void) {
-	ac_gen_tree(g_tree_texture, g_tree_verts, g_tree_indices);
+void ac_renderer_create_props(void) {
+	ac_gen_props(g_prop_texture, g_prop_verts, g_prop_indices);
 
 	// generate texture
-	glGenTextures(1, &g_treeTex);
-	glBindTexture(GL_TEXTURE_1D, g_treeTex);
+	glGenTextures(1, &g_propTex);
+	glBindTexture(GL_TEXTURE_2D, g_propTex);
 
-	glTexImage1D(GL_TEXTURE_1D, 0, GL_LUMINANCE8,
-				TREE_TEXTURE_SIZE, 0,
-				GL_LUMINANCE, GL_UNSIGNED_BYTE, g_tree_texture);
-	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_1D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
+				PROP_TEXTURE_SIZE, PROP_TEXTURE_SIZE, 0,
+				GL_LUMINANCE, GL_UNSIGNED_BYTE, g_prop_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
 	// generate VBOs
 	glGenBuffers(2, g_propVBOs);
-	glBindBuffer(GL_ARRAY_BUFFER, g_propVBOs[0]);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_propVBOs[1]);
-	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(g_tree_verts), g_tree_verts, GL_STATIC_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-		sizeof(g_tree_indices), g_tree_indices, GL_STATIC_DRAW);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_propVBOs[0]);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_propVBOs[1]);
+	glBufferDataARB(GL_ARRAY_BUFFER_ARB,
+		sizeof(g_prop_verts), g_prop_verts, GL_STATIC_DRAW_ARB);
+	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
+		sizeof(g_prop_indices), g_prop_indices, GL_STATIC_DRAW_ARB);
 	// unbind VBOs
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 }
 
 void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
@@ -506,6 +507,52 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 			glPopMatrix();
 		}
 	} else if (node->bldgs != NULL) {
+		int i;
+		float c, s;
+		ac_bldg_t *b;
+		for (b = node->bldgs, i = 0; i < BLDGS_PER_FIELD; i++, b++) {
+			glPushMatrix();
+
+			c = cosf(b->ang);
+			s = sinf(b->ang);
+			// column 1
+			m[0] = b->Xscale * c;
+			//m[1] = 0;
+			m[2] = b->Zscale * -s;
+			//m[3] = 0;
+			// column 2
+			//m[4] = 0;
+			m[5] = b->Yscale;
+			//m[6] = 0;
+			//m[7] = 0;
+			// column 3
+			m[8] = b->Xscale * s;
+			//m[9] = 0;
+			m[10] = b->Zscale * c;
+			//m[11] = 0;
+			// column 4
+			/*m[12] = t->pos.f[0];
+			m[13] = t->pos.f[1];
+			m[14] = t->pos.f[2];
+			//m[15] = 1;*/
+			ac_vec_tofloat(b->pos, &m[12]);
+			glMultMatrixf(m);
+
+			if (b->slantedRoof) {
+				glDrawElements(GL_TRIANGLE_STRIP, BLDG_SLNT_INDICES,
+					GL_UNSIGNED_BYTE, (void *)(TREE_BASE * 3
+						+ BLDG_FLAT_INDICES));
+				*g_vertCounter += BLDG_FLAT_VERTS;
+				*g_triCounter += BLDG_FLAT_INDICES - 2;
+			} else {
+				glDrawElements(GL_TRIANGLE_STRIP, BLDG_FLAT_INDICES,
+					GL_UNSIGNED_BYTE, (void *)(TREE_BASE * 3));
+				*g_vertCounter += BLDG_SLNT_VERTS;
+				*g_triCounter += BLDG_SLNT_INDICES - 2;
+			}
+
+			glPopMatrix();
+		}
 	} else if (node->child[0] != NULL) {
 		// it's enough to just check the existence of the 1st child because a
 		// node will always either have 4 children or none
@@ -539,22 +586,19 @@ void ac_renderer_recurse_proptree(ac_prop_t *node, int step) {
 
 void ac_renderer_draw_props(void) {
 	// make the necessary state changes
-	glEnable(GL_TEXTURE_1D);
-	glBindTexture(GL_TEXTURE_1D, g_treeTex);
-	glBindBuffer(GL_ARRAY_BUFFER, g_propVBOs[0]);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_propVBOs[1]);
+	glBindTexture(GL_TEXTURE_2D, g_propTex);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_propVBOs[0]);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_propVBOs[1]);
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, pos.f[0]));
-	glTexCoordPointer(1, GL_FLOAT, sizeof(ac_vertex_t),
+	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, st[0]));
 
 	ac_renderer_recurse_proptree(g_proptree, PROPMAP_SIZE / 2);
 	// bring the previous state back
 
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-	glDisable(GL_TEXTURE_1D);
-	glEnable(GL_TEXTURE_2D);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 }
 
 bool ac_renderer_init(uint *vcounter, uint *tcounter,
@@ -610,16 +654,18 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glFrontFace(GL_CW);
 	glEnable(GL_CULL_FACE);
 
+	glEnable(GL_TEXTURE_2D);
+
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);
 	glFogfv(GL_FOG_COLOR, fogcolour);
-	glFogf(GL_FOG_DENSITY, 0.005);
+	glFogf(GL_FOG_DENSITY, 0.003);
 
 	// generate resources
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
 	ac_renderer_calc_terrain_lodlevels();
-	ac_renderer_create_tree();
+	ac_renderer_create_props();
 
 	return true;
 }
@@ -628,10 +674,10 @@ void ac_renderer_shutdown(void) {
 	// FIXME: move to somewhere more appropriate
 	ac_gen_free_proptree(NULL);
 
-	glDeleteBuffers(2, g_propVBOs);
+	glDeleteBuffersARB(2, g_propVBOs);
 
 	glDeleteTextures(1, &g_hmapTex);
-	glDeleteTextures(1, &g_treeTex);
+	glDeleteTextures(1, &g_propTex);
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }

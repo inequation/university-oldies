@@ -12,10 +12,10 @@ static uint		g_seed;
 
 /// Internal pseudorandom number generator.
 int ac_gen_rand(void) {
-	g_seed = (16807LL * g_seed) % 2147483647;
+	g_seed = (16807LL * (g_seed + 1)) % 2147483647;
 	if (g_seed < 0)
 		g_seed += 2147483647;
-	return g_seed;
+	return g_seed - 1;
 }
 
 /// Perlin noise permutation table.
@@ -203,16 +203,19 @@ float ac_gen_sample_height(float x, float y) {
 #endif
 }
 
-void ac_gen_tree(uchar *texture, ac_vertex_t *verts, uchar *indices) {
+void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	int i, l, base, vofs, iofs;
-	const float invScale = 1.f / (TREE_TEXTURE_SIZE - 1);
+	const float invScale = 1.f / (PROP_TEXTURE_SIZE - 1);
 	float rpi;
 
 	// generate vertices and indices
 
+	// trees
+
 	// vertex #0 - tip of the tree
-	verts[0].pos = ac_vec_set(0, 0.9, 0, 0);
+	verts[0].pos = ac_vec_set(0, 1, 0, 0);
 	verts[0].st[0] = 1;
+	verts[0].st[1] = 0;
 
 	vofs = 1;
 	iofs = 0;
@@ -225,15 +228,118 @@ void ac_gen_tree(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 		for (i = 0; i < base; i++) {
 			verts[vofs].pos = ac_vec_set(cosf(i * rpi), -0.1, sinf(i * rpi), 0);
 			verts[vofs].st[0] = 0;
+			verts[vofs].st[1] = 0;
 			indices[iofs++] = vofs++;
 		}
 		indices[iofs++] = vofs - base;	// firts base vertex - full circle
 	}
 
-	// generate texture gradient
-	// exponential gradient from gray to black
-	for (i = 0; i < TREE_TEXTURE_SIZE; i++)
+	// buildings
+
+	// flat roof
+	l = vofs;
+	for (i = 0; i < 8; i++, vofs++) {
+		verts[vofs].pos = ac_vec_set(
+			((i + 1) / 2) % 2 == 0 ? -0.5 : 0.5,
+			i < 4 ? -1 : 1,
+			(i / 2) % 2 == 0 ? -0.5 : 0.5,
+			0);
+		verts[vofs].st[0] = i % 2;
+		verts[vofs].st[1] = i < 4 ? 1 : (1.f / (float)(PROP_TEXTURE_SIZE - 1));
+		if (i < 4) {
+			indices[iofs++] = l + i + 4;
+			indices[iofs++] = l + i;
+		}
+	}
+	// close the wall
+	indices[iofs++] = l + 4;
+	indices[iofs++] = l;
+	// degenerate triangle
+	indices[iofs] = indices[iofs - 1];
+	iofs++;
+	indices[iofs++] = l + 4;
+	// rooftop
+	indices[iofs++] = l + 4;
+	indices[iofs++] = l + 5;
+	indices[iofs++] = l + 7;
+	indices[iofs++] = l + 6;
+
+	// slanted roof
+	l = vofs;
+	// building base
+	for (i = 0; i < 8; i++, vofs++) {
+		verts[vofs].pos = ac_vec_set(
+			((i + 1) / 2) % 2 == 0 ? -0.5 : 0.5,
+			i < 4 ? -1 : 1,
+			(i / 2) % 2 == 0 ? -0.5 : 0.5,
+			0);
+		verts[vofs].st[0] = i % 2;
+		verts[vofs].st[1] = i < 4 ? 1 : (2.f / (float)(PROP_TEXTURE_SIZE - 1));
+		if (i < 4) {
+			indices[iofs++] = l + i + 4;
+			indices[iofs++] = l + i;
+		}
+	}
+	// close the wall
+	indices[iofs++] = l + 4;
+	indices[iofs++] = l;
+	// roof verts
+	verts[vofs].pos = ac_vec_set(0, 1.4, -0.5, 0);
+	verts[vofs].st[0] = 0.5;
+	verts[vofs++].st[1] = (1.f / (float)(PROP_TEXTURE_SIZE - 1));
+	verts[vofs].pos = ac_vec_set(0, 1.4, 0.5, 0);
+	verts[vofs].st[0] = 0.5;
+	verts[vofs++].st[1] = (1.f / (float)(PROP_TEXTURE_SIZE - 1));
+	// degenerate triangle
+	indices[iofs] = indices[iofs - 1];
+	iofs++;
+	indices[iofs++] = l + 4;
+	// north roof filler
+	indices[iofs++] = l + 4;
+	indices[iofs++] = l + 5;
+	indices[iofs++] = l + 8;
+	// degenerate triangle
+	indices[iofs++] = l + 8;
+	indices[iofs++] = l + 6;
+	// south roof filler
+	indices[iofs++] = l + 6;
+	indices[iofs++] = l + 9;
+	indices[iofs++] = l + 7;
+	// degenerate triangle
+	indices[iofs++] = l + 7;
+	indices[iofs++] = l + 6;
+	// rooftop
+	indices[iofs++] = l + 7;
+	indices[iofs++] = l + 4;
+	indices[iofs++] = l + 9;
+	indices[iofs++] = l + 8;
+	indices[iofs++] = l + 6;
+	indices[iofs++] = l + 5;
+
+	// texture
+
+	// tree strip: exponential gradient from gray to black
+	for (i = 0; i < PROP_TEXTURE_SIZE; i++)
 		texture[i] = 127 * expf(-2.f * i * invScale);
+	// building roof - 2 pixels wide
+	for (i = 0; i < PROP_TEXTURE_SIZE; i++)
+		texture[PROP_TEXTURE_SIZE + i] = 20;
+	for (i = 0; i < PROP_TEXTURE_SIZE; i++)
+		texture[PROP_TEXTURE_SIZE * 2 + i] = 40;
+	// building wall
+	for (l = 3; l < PROP_TEXTURE_SIZE; l++) {
+		for (i = 0; i < PROP_TEXTURE_SIZE; i++)
+			texture[PROP_TEXTURE_SIZE * l + i] = 96 + ac_gen_rand() % 32;
+	}
+	// window
+	for (l = 0; l < 9; l++) {
+		for (i = 0; i < 11; i++) {
+			if (i == 5 || l == 4)
+				continue;
+			texture[(l + PROP_TEXTURE_SIZE / 2 - PROP_TEXTURE_SIZE / 3) * PROP_TEXTURE_SIZE
+				+ i + PROP_TEXTURE_SIZE / 2 - 5] = 255;
+		}
+	}
 }
 
 static uchar	*g_propmap;
@@ -311,7 +417,7 @@ ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 		switch (g_propmap[y * PROPMAP_SIZE + x]) {
 			case 0:
 				break;
-			case 1:
+			case 1:	// tree node
 				node->trees = &trees[*numTrees];
 				//node->bldgs = NULL;
 				for (i = 0; i < TREES_PER_FIELD; i++) {
@@ -328,9 +434,9 @@ ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 					trees[i + *numTrees].ang =
 						(ac_gen_rand() % 360) / 180.f * M_PI;
 					trees[i + *numTrees].XZscale =
-						0.6 + 0.001 * (ac_gen_rand() % 801);
+						1.0 + 0.001 * (ac_gen_rand() % 1201);
 					trees[i + *numTrees].Yscale =
-						1.6 + 0.001 * (ac_gen_rand() % 1601);
+						2.4 + 0.001 * (ac_gen_rand() % 3201);
 					if (h - 0.1 < min)
 						min = h - 0.1;
 					else if (h + trees[i + *numTrees].Yscale > max)
@@ -338,7 +444,39 @@ ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 				}
 				(*numTrees) += TREES_PER_FIELD;
 				break;
-			case 2:
+			case 2:	// building node
+				//node->trees = NULL;
+				node->bldgs = &bldgs[*numBldgs];
+				for (i = 0; i < BLDGS_PER_FIELD; i++) {
+					tx = (x << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+						% ((1 << PROPMAP_SHIFT) * 100));
+					tz = (y << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+						% ((1 << PROPMAP_SHIFT) * 100));
+					h = ac_gen_sample_height(tx, tz);
+					bldgs[i + *numBldgs].pos = ac_vec_set(
+						tx - HEIGHTMAP_SIZE * 0.5,
+						h,
+						tz - HEIGHTMAP_SIZE * 0.5,
+						1.f);
+					bldgs[i + *numBldgs].ang =
+						((ac_gen_rand() % 4) * 90 - 5 + ac_gen_rand() % 5)
+							/ 180.f * M_PI;
+					bldgs[i + *numBldgs].Xscale =
+						6 + 0.001 * (ac_gen_rand() % 2001);
+					bldgs[i + *numBldgs].Zscale =
+						8 + 0.001 * (ac_gen_rand() % 3001);
+					bldgs[i + *numBldgs].Yscale =
+						2.8 + 0.001 * (ac_gen_rand() % 3001);
+					bldgs[i + *numBldgs].slantedRoof =
+						ac_gen_rand() % 100 >= 33;
+					if (h - 1 < min)
+						min = h - 1;
+					/*else if (h + bldgs[i + *numBldgs].Yscale > max)
+						max = h + bldgs[i + *numBldgs].Yscale;*/
+				}
+				// HACK: for some reason the calculated heights are insufficient
+				max = HEIGHT + 5.8;
+				(*numBldgs) += BLDGS_PER_FIELD;
 				break;
 		}
 	} else {
