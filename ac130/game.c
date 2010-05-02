@@ -178,8 +178,8 @@ void ac_game_fire_weapon(ac_weap_t w) {
 			//g_projs[i].pos.f[1] += 0.5;
 			switch (w) {
 				case WP_M61:
-					// tracer round every 10 rounds
-					if (++m61 % 10 == 0)
+					// tracer round every 5 rounds
+					if (++m61 % 5 == 0)
 						g_projs[i].weap = WP_M61_TRACER;
 					g_projs[i].vel = ac_vec_mulf(g_forward, WEAP_MUZZVEL_M61);
 					break;
@@ -252,6 +252,7 @@ void ac_game_weapons_think(ac_input_t *in, float t) {
 void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	float time = (float)ticks * 0.001;
 	float plane_angle = time * TIME_SCALE;
+	float fy, fp;
 	ac_vec4_t tmp;
 
 	g_frameTimeVec = ac_vec_setall(frameTime);
@@ -287,11 +288,11 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	ac_renderer_start_scene(&g_viewpoint);
 
 	// calculate firing axis
+	// apply bullet spread (~0,45 of a degree)
+	fy = g_viewpoint.angles[0] - 0.004 + 0.001 * (rand() % 9);
+	fp = g_viewpoint.angles[1] - 0.004 + 0.001 * (rand() % 9);
 	g_forward = ac_vec_set(
-		-cosf(g_viewpoint.angles[1]) * sinf(g_viewpoint.angles[0]),
-		sinf(g_viewpoint.angles[1]),
-		-cosf(g_viewpoint.angles[1]) * cosf(g_viewpoint.angles[0]),
-		0);
+		-cosf(fp) * sinf(fy), sinf(fp), -cosf(fp) * cosf(fy), 0);
 
 	ac_renderer_start_fx();
 	// advance the non-player elements of the world

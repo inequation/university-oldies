@@ -99,8 +99,6 @@ typedef struct {
 #define TREES_PER_FIELD		25
 #define BLDGS_PER_FIELD		1
 
-#define PROP_LOD_DISTANCE	200.f
-
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
@@ -173,6 +171,8 @@ void ac_gen_free_proptree(ac_prop_t *n);
 #define TERRAIN_NUM_INDICES			(TERRAIN_NUM_BODY_INDICES				\
 										+ TERRAIN_NUM_SKIRT_INDICES)
 #define TERRAIN_LOD					40.f
+
+#define PROP_LOD_DISTANCE	250.f
 
 /// Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
