@@ -12,7 +12,9 @@ typedef enum {
 	/// L/60 Bofors cannon round
 	WP_L60,
 	/// M102 howitzer round
-	WP_M102
+	WP_M102,
+	/// M61 tracer round
+	WP_M61_TRACER
 } ac_weap_t;
 
 typedef struct {
@@ -28,11 +30,11 @@ typedef struct {
 /// Real rate of fire: 10 rounds per minute
 #define WEAP_FIREDELAY_M102	6
 /// Real muzzle velocity: 1050m/s
-#define WEAP_MUZZVEL_M61	1050
+#define WEAP_MUZZVEL_M61	350//1050
 /// Real muzzle velocity: 881m/s
-#define WEAP_MUZZVEL_L60	881
+#define WEAP_MUZZVEL_L60	300//881
 /// Real muzzle velocity: 494m/s
-#define WEAP_MUZZVEL_M102	494
+#define WEAP_MUZZVEL_M102	160//494
 
 #define MAX_PROJECTILES		1024
 ac_projectile_t	g_projs[MAX_PROJECTILES];
@@ -148,13 +150,15 @@ void ac_game_advance_projectiles(void) {
 		g_projs[i].pos = ac_vec_sub(npos, ofs);
 		// add gravity
 		g_projs[i].vel = ac_vec_add(g_projs[i].vel, grav);
+		// draw tracers
 		switch (g_projs[i].weap) {
-			case WP_M61:
+			case WP_M61_TRACER:
+				ac_renderer_draw_tracer(g_projs[i].pos,
+					ac_vec_normalize(g_projs[i].vel), 3.f);
 				break;
 			case WP_L60:
-				break;
-			case WP_M102:
-				// no tracers for the howitzer
+				ac_renderer_draw_tracer(g_projs[i].pos,
+					ac_vec_normalize(g_projs[i].vel), 5.f);
 				break;
 			default:
 				break;
@@ -164,14 +168,19 @@ void ac_game_advance_projectiles(void) {
 
 void ac_game_fire_weapon(ac_weap_t w) {
 	int i;
+	static int m61 = 0;
 	printf("FIRE! %d\n", (int)w);
 	// find a free projectile slot
 	for (i = 0; i < sizeof(g_projs) / sizeof(g_projs[0]); i++) {
 		if (g_projs[i].weap == WP_NONE) {
 			g_projs[i].weap = w;
 			g_projs[i].pos = g_viewpoint.origin;
+			//g_projs[i].pos.f[1] += 0.5;
 			switch (w) {
 				case WP_M61:
+					// tracer round every 10 rounds
+					if (++m61 % 10 == 0)
+						g_projs[i].weap = WP_M61_TRACER;
 					g_projs[i].vel = ac_vec_mulf(g_forward, WEAP_MUZZVEL_M61);
 					break;
 				case WP_L60:
@@ -182,6 +191,7 @@ void ac_game_fire_weapon(ac_weap_t w) {
 					break;
 				// shut up compiler
 				case WP_NONE:
+				case WP_M61_TRACER:
 					break;
 			}
 			return;
@@ -222,8 +232,7 @@ void ac_game_weapons_think(ac_input_t *in, float t) {
 					ac_game_fire_weapon(weap);
 				}
 				break;
-			// shut up compiler
-			case WP_NONE:
+			default:
 				break;
 		}
 		rpressed = false;
@@ -247,9 +256,6 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 
 	g_frameTimeVec = ac_vec_setall(frameTime);
 
-	// advance the non-player elements of the world
-	ac_game_advance_projectiles();
-
 	// handle viewpoint movement
 	g_viewpoint.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE
 		+ frameTime * TIME_SCALE;	// keep the cam in sync with the plane
@@ -258,7 +264,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	if (g_viewpoint.angles[0] < -plane_angle + M_PI * 0.2)
 		g_viewpoint.angles[0] = -plane_angle + M_PI * 0.2;
 	else if (g_viewpoint.angles[0] > -plane_angle + M_PI * 0.8)
-		g_viewpoint.angles[0] = -plane_angle + M_PI * 0.8;
+		g_viewpoint.angles[0] = -plane_angle + M_PI* 0.8;
 	if (g_viewpoint.angles[1] > M_PI * -0.165)
 		g_viewpoint.angles[1] = M_PI * -0.165;
 	else if (g_viewpoint.angles[1] < M_PI * -0.45)
@@ -270,13 +276,15 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		g_viewpoint.angles[1] = M_PI * -0.5;
 #endif
 
-	g_viewpoint.origin = ac_vec_set(0.f, 200.f, 0.f, 0.f);
+	g_viewpoint.origin = ac_vec_set(0.f, 250.f, 0.f, 0.f);
 	tmp = ac_vec_set(cosf(plane_angle) * FLOATING_RADIUS,
 				0.f,
 				sinf(plane_angle) * FLOATING_RADIUS,
 				0.f);
 	g_viewpoint.origin = ac_vec_add(tmp, g_viewpoint.origin);
-	g_viewpoint.fov = M_PI * 0.06;
+	g_viewpoint.fov = M_PI * 0.04;
+
+	ac_renderer_start_scene(&g_viewpoint);
 
 	// calculate firing axis
 	g_forward = ac_vec_set(
@@ -285,10 +293,14 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		-cosf(g_viewpoint.angles[1]) * cosf(g_viewpoint.angles[0]),
 		0);
 
+	ac_renderer_start_fx();
+	// advance the non-player elements of the world
+	ac_game_advance_projectiles();
+	ac_renderer_finish_fx();
+
 	// operate the weapons
 	ac_game_weapons_think(input, frameTime);
 
-	ac_renderer_start_scene(&g_viewpoint);
 	ac_renderer_finish_3D();
 	ac_renderer_composite(false);
 }

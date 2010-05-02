@@ -6,12 +6,20 @@
 
 #include "ac_math.h"
 
+static const uint	negzero = 0x80000000;
+
 inline ac_vec4_t ac_vec_set(float x, float y, float z, float w) {
 	return (ac_vec4_t)_mm_set_ps(w, z, y, x);
 }
 
 inline ac_vec4_t ac_vec_setall(float b) {
 	return (ac_vec4_t)_mm_set1_ps(b);
+}
+
+inline ac_vec4_t ac_vec_negate(ac_vec4_t a) {
+	ac_vec4_t tmp;
+	tmp = ac_vec_setall(*((float*)&negzero));
+	return (ac_vec4_t)_mm_xor_ps(a.sse, tmp.sse);
 }
 
 inline ac_vec4_t ac_vec_add(ac_vec4_t a, ac_vec4_t b) {

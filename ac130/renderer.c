@@ -44,6 +44,13 @@ uchar		g_prop_texture[PROP_TEXTURE_SIZE * PROP_TEXTURE_SIZE];
 GLuint		g_propTex;
 uint		g_propVBOs[2];
 
+// FX resources
+ac_vertex_t	g_fx_verts[4];
+uchar		g_fx_indices[4];
+uchar		g_fx_texture[2 * FX_TEXTURE_SIZE * FX_TEXTURE_SIZE];
+GLuint		g_fxTex;
+uint		g_fxVBOs[2];
+
 // counters for measuring performance
 uint		*g_triCounter;
 uint		*g_vertCounter;
@@ -411,6 +418,7 @@ void ac_renderer_draw_terrain() {
 	ac_renderer_recurse_terrain(0.f, 0.f, 1.f, 1.f,
 								g_ter_maxLevels, 1.f);
 
+	glBindTexture(GL_TEXTURE_2D, 0);
 	glPopMatrix();
 }
 
@@ -437,6 +445,34 @@ void ac_renderer_create_props(void) {
 		sizeof(g_prop_verts), g_prop_verts, GL_STATIC_DRAW_ARB);
 	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
 		sizeof(g_prop_indices), g_prop_indices, GL_STATIC_DRAW_ARB);
+	// unbind VBOs
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
+}
+
+void ac_renderer_create_fx(void) {
+	ac_gen_fx(g_fx_texture, g_fx_verts, g_fx_indices);
+
+	// generate texture
+	glGenTextures(1, &g_fxTex);
+	glBindTexture(GL_TEXTURE_2D, g_fxTex);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8,
+				PROP_TEXTURE_SIZE, PROP_TEXTURE_SIZE, 0,
+				GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, g_fx_texture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	// generate VBOs
+	glGenBuffersARB(2, g_fxVBOs);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_fxVBOs[0]);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_fxVBOs[1]);
+	glBufferDataARB(GL_ARRAY_BUFFER_ARB,
+		sizeof(g_fx_verts), g_fx_verts, GL_STATIC_DRAW_ARB);
+	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
+		sizeof(g_fx_indices), g_fx_indices, GL_STATIC_DRAW_ARB);
 	// unbind VBOs
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
@@ -599,6 +635,80 @@ void ac_renderer_draw_props(void) {
 
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ac_renderer_start_fx(void) {
+	// make the necessary state changes
+	/*glBindTexture(GL_TEXTURE_2D, g_fxTex);
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_fxVBOs[0]);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_fxVBOs[1]);
+	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
+					(void *)offsetof(ac_vertex_t, pos.f[0]));
+	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
+					(void *)offsetof(ac_vertex_t, st[0]));*/
+}
+
+void ac_renderer_finish_fx(void) {
+	// bring the previous state back
+	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
+	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {
+#if 1
+	int i;
+	glLineWidth(scale);
+	dir = ac_vec_add(pos, ac_vec_mulf(dir, -scale));
+	/*ac_vec4_t bounds[2];
+	for (i = 0; i < 3; i++) {
+		if (pos.f[i] < dir.f[i]) {
+			bounds[0].f[i] = pos.f[i];
+			bounds[1].f[i] = dir.f[i];
+		} else {
+			bounds[1].f[i] = pos.f[i];
+			bounds[0].f[i] = dir.f[i];
+		}
+	}
+	if (ac_renderer_cull_bbox(bounds))
+		return;*/
+	glColor4f(1, 1, 1, 1);
+	glBegin(GL_LINES);
+	glVertex3fv(pos.f);
+	glVertex3fv(dir.f);
+	glVertex3f(0, 0, 0);
+	glEnd();
+#else
+	static GLmatrix_t m;
+
+	ac_vec4_t fwd, right, up;
+	// find the up vector
+	up = ac_vec_sub(pos, g_viewpoint);
+	up = ac_vec_sub(up, ac_vec_mulf(up, ac_vec_dot(up, dir)));
+	up = ac_vec_normalize(up);
+	// find the forward vector
+	fwd = ac_vec_negate(dir);
+	// find the right vector
+	right = ac_vec_cross(up, fwd);
+
+	ac_vec_tofloat(right, &m[0]);
+	ac_vec_tofloat(up, &m[4]);
+	ac_vec_tofloat(fwd, &m[8]);
+	m[12] = ac_vec_dot(pos, right);
+	m[13] = ac_vec_dot(pos, up);
+	m[14] = ac_vec_dot(pos, fwd);
+	m[15] = 0;
+
+	glPushMatrix();
+	glMultMatrixf(m);
+
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void *)0);
+	*g_vertCounter += 4;
+	*g_triCounter += 4;
+
+	glPopMatrix();
+#endif
 }
 
 bool ac_renderer_init(uint *vcounter, uint *tcounter,
@@ -650,9 +760,9 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	// set face culling
-	glCullFace(GL_BACK);
+	/*glCullFace(GL_BACK);
 	glFrontFace(GL_CW);
-	glEnable(GL_CULL_FACE);
+	glEnable(GL_CULL_FACE);*/
 
 	glEnable(GL_TEXTURE_2D);
 
@@ -661,11 +771,15 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glFogfv(GL_FOG_COLOR, fogcolour);
 	glFogf(GL_FOG_DENSITY, 0.0025);
 
+	// set line smoothing
+	glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
 	// generate resources
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
 	ac_renderer_calc_terrain_lodlevels();
 	ac_renderer_create_props();
+	ac_renderer_create_fx();
 
 	return true;
 }

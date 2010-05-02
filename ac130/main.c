@@ -49,9 +49,9 @@ int main (int argc, char *argv[]) {
 	// update window caption to say that we're done generating stuff
 	SDL_WM_SetCaption("AC-130", "AC-130");
 	// hide mouse cursor and grab input
-	//SDL_ShowCursor(0);
-	//SDL_WM_GrabInput(SDL_GRAB_ON);
-	//bool grab = false;
+	SDL_ShowCursor(0);
+	SDL_WM_GrabInput(SDL_GRAB_ON);
+	bool grab = true;
 
 	memset(&prevInput, 0, sizeof(prevInput));
 
@@ -82,24 +82,27 @@ int main (int argc, char *argv[]) {
 				case SDL_KEYDOWN:
 					if (event.key.keysym.sym == SDLK_ESCAPE)
 						done = true;
-					else if (event.key.keysym.sym == 'N'
-								|| event.key.keysym.sym == 'n')
+					else if (event.key.keysym.sym == 'F'
+								|| event.key.keysym.sym == 'f')
 						curInput.flags |= INPUT_NEGATIVE;
-					break;
-				case SDL_MOUSEBUTTONDOWN:
-				case SDL_MOUSEBUTTONUP:
-					if (event.button.state == SDL_PRESSED) {
-						curInput.flags |= event.button.button == SDL_BUTTON_LEFT
-							? INPUT_MOUSE_LEFT : INPUT_MOUSE_RIGHT;
-						/*grab = !grab;
+					else if (event.key.keysym.sym == 'G'
+								|| event.key.keysym.sym == 'g') {
+						grab = !grab;
 						if (grab) {
 							SDL_WM_GrabInput(SDL_GRAB_ON);
 							SDL_ShowCursor(0);
 						} else {
 							SDL_WM_GrabInput(SDL_GRAB_OFF);
 							SDL_ShowCursor(1);
-						}*/
-					} else
+						}
+					}
+					break;
+				case SDL_MOUSEBUTTONDOWN:
+				case SDL_MOUSEBUTTONUP:
+					if (event.button.state == SDL_PRESSED)
+						curInput.flags |= event.button.button == SDL_BUTTON_LEFT
+							? INPUT_MOUSE_LEFT : INPUT_MOUSE_RIGHT;
+					else
 						curInput.flags &= event.button.button == SDL_BUTTON_LEFT
 							? ~INPUT_MOUSE_LEFT : ~INPUT_MOUSE_RIGHT;
 					break;

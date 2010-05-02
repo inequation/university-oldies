@@ -342,6 +342,39 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	}
 }
 
+void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
+	int i, j;
+	float d, r, x, y;
+
+	// geometry
+
+	// tracer
+	for (i = 0; i < 4; i++) {
+		verts[i].pos = ac_vec_set(
+			i % 2 == 0 ? -0.025 : 0.025,
+			0,
+			i > 1 ? 2 : 0,
+			0);
+		verts[i].st[0] = i % 2 == 0 ? 0 : 1;
+		verts[i].st[1] = i > 1 ? 1 : 0;
+		indices[i] = i;
+	}
+
+	// texture
+
+	// tracer
+	r = (FX_TEXTURE_SIZE - 1) * 0.5;
+	for (i = 0; i < FX_TEXTURE_SIZE; i++) {
+		y = r - (float)i;
+		for (j = 0; j < FX_TEXTURE_SIZE; j++) {
+			x = r - (float)j;
+			d = sqrtf(x * x + y * y);
+			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 255;
+			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = d <= r ? 255 : 0;
+		}
+	}
+}
+
 static uchar	*g_propmap;
 
 static void ac_gen_propmap_populate(int x, int y, int *counter, int *trace,
@@ -459,7 +492,7 @@ ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 						tz - HEIGHTMAP_SIZE * 0.5,
 						1.f);
 					bldgs[i + *numBldgs].ang =
-						((ac_gen_rand() % 4) * 90 - 5 + ac_gen_rand() % 5)
+						((ac_gen_rand() % 4) * 90 - 10 + ac_gen_rand() % 21)
 							/ 180.f * M_PI;
 					bldgs[i + *numBldgs].Xscale =
 						6 + 0.001 * (ac_gen_rand() % 2001);

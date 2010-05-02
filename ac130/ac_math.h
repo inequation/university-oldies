@@ -33,6 +33,9 @@ extern inline ac_vec4_t ac_vec_set(float x, float y, float z, float w);
 /// a = [b, b, b, b]
 extern inline ac_vec4_t ac_vec_setall(float b);
 
+/// b = -a
+extern inline ac_vec4_t ac_vec_negate(ac_vec4_t a);
+
 /// c = a + b
 extern inline ac_vec4_t ac_vec_add(ac_vec4_t a, ac_vec4_t b);
 

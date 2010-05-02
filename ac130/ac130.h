@@ -106,6 +106,8 @@ typedef struct {
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
 
+#define FX_TEXTURE_SIZE		64
+
 extern uchar				g_heightmap[];
 extern ac_prop_t			*g_proptree;
 
@@ -123,6 +125,13 @@ void ac_gen_terrain(int seed);
 /// \param indices		index array
 void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
+
+/// Generates FX (bullet tracers, explosions, smoke plums etc.) resources.
+/// \param texture		texture byte array
+/// \param verts		vertex array
+/// \param indices		index array
+void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
+
 /// Generates prop (tree and buildings) lists.
 /// \note				Both trees and bldgs must be preallocated by the caller.
 /// \param numTrees		pointer to where to store the tree count
@@ -133,6 +142,12 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
 ///						information
 void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs);
+
+/// Frees the memory allocated for the given prop tree node and all of its
+/// children.
+/// \param n			pointer to the node of the tree to free (pass NULL to
+///						free the entire tree)
+void ac_gen_free_proptree(ac_prop_t *n);
 
 // =========================================================
 // Renderer interface
@@ -178,19 +193,27 @@ void ac_renderer_set_heightmap();
 /// \note				Must be called *before* \ref ac_renderer_finish3D
 void ac_renderer_start_scene(ac_viewpoint_t *vp);
 
-/// Adds a tree to the scene at the given position.
-/// \param numTrees		number of trees in the list
-/// \param trees		tree list
-void ac_renderer_add_trees(int numTrees, ac_tree_t *trees);
+/// Starts the FX rendering stage - calls the necessary state changes, etc.
+/// \sa ac_renderer_finish_fx
+/// \sa ac_renderer_draw_tracer
+void ac_renderer_start_fx(void);
 
-/// Adds a building to the scene.
-/// \param numBldgs		number of buildings in the list
-/// \param bldgs		buildings list
-void ac_renderer_add_bldg(ac_bldg_t *b);
+/// Finishes the FX rendering stage - calls the necessary state changes, etc.
+/// \sa ac_renderer_start_fx
+/// \sa ac_renderer_draw_tracer
+void ac_renderer_finish_fx(void);
+
+/// Draws a bullet tracer at the given position in the given direction.
+/// \note				Must be called *after* \ref ac_renderer_start_fx and
+///						*before* \ref ac_renderer_finish_fx
+/// \param pos			position of the tracer
+/// \param dir			tracer's direction
+/// \param scale		scale of the tracer (length in metres, width in pixels)
+void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
 /// switches to the 2D (HUD) stage.
-/// \note				Must be called *after* \ref ac_renderer_viewpoint and
+/// \note				Must be called *after* \ref ac_renderer_start_scene and
 ///						*before* \ref ac_renderer_finish2D
 void ac_renderer_finish_3D(void);
 
