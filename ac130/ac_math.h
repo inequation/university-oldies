@@ -51,17 +51,22 @@ extern inline ac_vec4_t ac_vec_mulf(ac_vec4_t a, float b);
 /// d = a * b + c
 extern inline ac_vec4_t ac_vec_ma(ac_vec4_t a, ac_vec4_t b, ac_vec4_t c);
 
-/// Dot product of a and b
+/// Dot product of a and b.
 extern inline float ac_vec_dot(ac_vec4_t a, ac_vec4_t b);
 
-/// Cross product of a and b
+/// Cross product of a and b.
 extern inline ac_vec4_t ac_vec_cross(ac_vec4_t a, ac_vec4_t b);
 
-/// Length of vector a
+/// Length of vector a.
 extern inline float ac_vec_length(ac_vec4_t a);
 
-/// Vector normalization
+/// Vector normalization.
 extern inline ac_vec4_t ac_vec_normalize(ac_vec4_t a);
+
+/// Vector decomposition into a unit length direction vector and length scalar.
+/// \param v	vector to decompose
+/// \param a	pointer to vector to put the direction vector into
+extern inline float ac_vec_decompose(ac_vec4_t b, ac_vec4_t *a);
 
 /// Write from __m128 (a) to flat floats (b).
 extern inline void ac_vec_tofloat(ac_vec4_t a, float b[4]);

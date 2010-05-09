@@ -458,7 +458,7 @@ void ac_renderer_create_fx(void) {
 	glBindTexture(GL_TEXTURE_2D, g_fxTex);
 
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8_ALPHA8,
-				PROP_TEXTURE_SIZE, PROP_TEXTURE_SIZE, 0,
+				FX_TEXTURE_SIZE, FX_TEXTURE_SIZE, 0,
 				GL_LUMINANCE_ALPHA, GL_UNSIGNED_BYTE, g_fx_texture);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
@@ -640,13 +640,14 @@ void ac_renderer_draw_props(void) {
 
 void ac_renderer_start_fx(void) {
 	// make the necessary state changes
-	/*glBindTexture(GL_TEXTURE_2D, g_fxTex);
+	glBindTexture(GL_TEXTURE_2D, g_fxTex);
+	glEnable(GL_BLEND);
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_fxVBOs[0]);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_fxVBOs[1]);
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, pos.f[0]));
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
-					(void *)offsetof(ac_vertex_t, st[0]));*/
+					(void *)offsetof(ac_vertex_t, st[0]));
 }
 
 void ac_renderer_finish_fx(void) {
@@ -654,61 +655,70 @@ void ac_renderer_finish_fx(void) {
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+	glDisable(GL_BLEND);
+	glColor4f(1, 1, 1, 1);
+}
+
+void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
+	static GLmatrix_t m;
+	const float *p1 = &m[4], *p2 = &m[8];
+	float s = sinf(angle);
+	float c = cosf(angle);
+
+#if 0
+	ac_vec4_t p = ac_vec_add(pos, ac_vec_set(0, 10, 0, 0));
+	glColor4f(1, 0, 0, 1);
+	glBegin(GL_LINES);
+	glVertex3f(0, 200, 0);
+	glVertex3fv(pos.f);
+	glEnd();
+	glColor4f(1, 1, 1, 1);
+#endif
+
+	glPushMatrix();
+
+	// cheap, cheated sprites
+#if 1
+	glTranslatef(pos.f[0], pos.f[1], pos.f[2]);
+	glGetFloatv(GL_MODELVIEW_MATRIX, m);
+	// nullify the rotation part of the matrix
+	memset(m, 0, sizeof(m[0]) * 3 * 4);
+	m[0] = scale * c;
+	m[1] = scale * s;
+	m[4] = scale * -s;
+	m[5] = scale * c;
+	m[10] = scale;
+#else
+	glGetFloatv(GL_MODELVIEW_MATRIX, m);
+	// translate
+	m[12] += ac_vec_dot(*((ac_vec4_t *)&m), pos);
+	m[13] += ac_vec_dot(*((ac_vec4_t *)&p1), pos);
+	m[14] += ac_vec_dot(*((ac_vec4_t *)&p2), pos);
+	// nullify the rotation part of the matrix
+	memset(m, 0, sizeof(m[0]) * 3 * 4);
+	m[0] = scale;
+	m[1] = sinf(angle);
+	m[4] = -sinf(angle);
+	m[5] = scale * scale * (1.f - cosf(angle)) + cosf(angle);
+	m[10] = scale;
+#endif
+	// reload the matrix
+	glLoadMatrixf(m);
+
+	glColor4f(1, 1, 1, alpha);
+	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void *)0);
+
+	glPopMatrix();
 }
 
 void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {
-#if 1
-	int i;
 	glLineWidth(scale);
 	dir = ac_vec_add(pos, ac_vec_mulf(dir, -scale));
-	/*ac_vec4_t bounds[2];
-	for (i = 0; i < 3; i++) {
-		if (pos.f[i] < dir.f[i]) {
-			bounds[0].f[i] = pos.f[i];
-			bounds[1].f[i] = dir.f[i];
-		} else {
-			bounds[1].f[i] = pos.f[i];
-			bounds[0].f[i] = dir.f[i];
-		}
-	}
-	if (ac_renderer_cull_bbox(bounds))
-		return;*/
 	glColor4f(1, 1, 1, 1);
 	glBegin(GL_LINES);
 	glVertex3fv(pos.f);
 	glVertex3fv(dir.f);
-	glVertex3f(0, 0, 0);
 	glEnd();
-#else
-	static GLmatrix_t m;
-
-	ac_vec4_t fwd, right, up;
-	// find the up vector
-	up = ac_vec_sub(pos, g_viewpoint);
-	up = ac_vec_sub(up, ac_vec_mulf(up, ac_vec_dot(up, dir)));
-	up = ac_vec_normalize(up);
-	// find the forward vector
-	fwd = ac_vec_negate(dir);
-	// find the right vector
-	right = ac_vec_cross(up, fwd);
-
-	ac_vec_tofloat(right, &m[0]);
-	ac_vec_tofloat(up, &m[4]);
-	ac_vec_tofloat(fwd, &m[8]);
-	m[12] = ac_vec_dot(pos, right);
-	m[13] = ac_vec_dot(pos, up);
-	m[14] = ac_vec_dot(pos, fwd);
-	m[15] = 0;
-
-	glPushMatrix();
-	glMultMatrixf(m);
-
-	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void *)0);
-	*g_vertCounter += 4;
-	*g_triCounter += 4;
-
-	glPopMatrix();
-#endif
 }
 
 bool ac_renderer_init(uint *vcounter, uint *tcounter,
@@ -718,7 +728,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE, 8);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 0);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
@@ -760,11 +770,14 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	// set face culling
-	/*glCullFace(GL_BACK);
+#ifdef NDEBUG
+	glCullFace(GL_BACK);
 	glFrontFace(GL_CW);
-	glEnable(GL_CULL_FACE);*/
+	glEnable(GL_CULL_FACE);
+#endif
 
 	glEnable(GL_TEXTURE_2D);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);

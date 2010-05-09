@@ -83,7 +83,7 @@ float ac_gen_perlin(float x, float y, float z) {
 static void ac_gen_cloudmap(char *dst, int size) {
 	int i, x, y, xoff, yoff, pix;
 	char *submaps[3];
-	char *p;
+	char *c;
 	float freq;
 
 	freq = 0.015 + 0.000001 * (float)((ac_gen_rand() % 10000) - 5000);
@@ -92,16 +92,16 @@ static void ac_gen_cloudmap(char *dst, int size) {
 		submaps[x] = malloc(size * size);
 
 	// fill the maps with noise
-	for (i = 0, p = dst;
+	for (i = 0, c = dst;
 		i < 1 + sizeof(submaps) / sizeof(submaps[0]);
 		i++, freq *= 2.0) {
 		if (i > 0)
-			p = submaps[i - 1];
+			c = submaps[i - 1];
 		xoff = ac_gen_rand() % (size * 2);
 		yoff = ac_gen_rand() % (size * 2);
 		for (y = 0; y < size; y++) {
 			for (x = 0; x < size; x++)
-				p[y * size + x] = (char)(127.f
+				c[y * size + x] = (char)(127.f
 					* ac_gen_perlin(
 						(float)(x + xoff) * freq,
 						(float)(y + yoff) * freq,
@@ -113,11 +113,11 @@ static void ac_gen_cloudmap(char *dst, int size) {
 	// combine maps
 	for (y = 0; y < size; y++) {
 		for (x = 0; x < size; x++) {
-			for (i = 0, p = submaps[i];
+			for (i = 0, c = submaps[i];
 			i < sizeof(submaps) / sizeof(submaps[0]);
-			i++, p = submaps[i]) {
+			i++, c = submaps[i]) {
 				pix = (int)(dst[y * size + x])
-					+ (int)(p[y * size + x]) / (2 << i);
+					+ (int)(c[y * size + x]) / (2 << i);
 				if (pix < -128)
 					pix = -128;
 				else if (pix > 127)
@@ -342,35 +342,48 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	}
 }
 
+inline float ac_gen_smoothstep(float t) {
+	return t * t * (3 - 2 * t);
+}
+
 void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	int i, j;
-	float d, r, x, y;
+	float d, x, y, z, f, perlin;
+	const float r = (FX_TEXTURE_SIZE - 1) * 0.5;
+	const float invr = 1.f / r;
+	const float invr2 = invr * invr;
 
 	// geometry
-
-	// tracer
 	for (i = 0; i < 4; i++) {
 		verts[i].pos = ac_vec_set(
-			i % 2 == 0 ? -0.025 : 0.025,
+			i % 2 == 0 ? -0.5 : 0.5,
+			i < 2 ? 0.5 : -0.5,
 			0,
-			i > 1 ? 2 : 0,
 			0);
 		verts[i].st[0] = i % 2 == 0 ? 0 : 1;
-		verts[i].st[1] = i > 1 ? 1 : 0;
+		verts[i].st[1] = i < 2 ? 0 : 1;
 		indices[i] = i;
 	}
 
 	// texture
-
-	// tracer
-	r = (FX_TEXTURE_SIZE - 1) * 0.5;
 	for (i = 0; i < FX_TEXTURE_SIZE; i++) {
-		y = r - (float)i;
+		y = (float)i - r;
 		for (j = 0; j < FX_TEXTURE_SIZE; j++) {
-			x = r - (float)j;
+			x = (float)j - r;
+			// this won't give us an exact sphere, but it's close enough
+			z = -sinf(acosf(x * y * invr2));
 			d = sqrtf(x * x + y * y);
-			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 255;
-			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = d <= r ? 255 : 0;
+			perlin = ac_gen_perlin(x * invr * 4, y * invr * 4, z * invr * 4);
+			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 0] = 225 + perlin * 30;
+			if (d <= r - 40.f)
+				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 255;
+			else if (d <= r) {
+				f = (r - d) / 40.f;
+				perlin = (perlin + 1.f) * 0.5;
+				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] =
+					ac_gen_smoothstep(f) * 255 * (f + perlin * (1 - f));
+			} else
+				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 0;
 		}
 	}
 }

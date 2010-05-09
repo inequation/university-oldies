@@ -6,7 +6,7 @@
 
 #include "ac_math.h"
 
-static const uint	negzero = 0x80000000;
+static const unsigned int	negzero = 0x80000000;
 
 inline ac_vec4_t ac_vec_set(float x, float y, float z, float w) {
 	return (ac_vec4_t)_mm_set_ps(w, z, y, x);
@@ -63,6 +63,12 @@ inline float ac_vec_length(ac_vec4_t a) {
 inline ac_vec4_t ac_vec_normalize(ac_vec4_t a) {
 	float invl = 1.f / ac_vec_length(a);
 	return ac_vec_mulf(a, invl);
+}
+
+inline float ac_vec_decompose(ac_vec4_t b, ac_vec4_t *a) {
+	float l = ac_vec_length(b);
+	*a = ac_vec_mulf(b, 1.f / l);
+	return l;
 }
 
 inline void ac_vec_tofloat(ac_vec4_t a, float b[4]) {

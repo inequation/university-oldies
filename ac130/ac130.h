@@ -104,7 +104,7 @@ typedef struct {
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
 
-#define FX_TEXTURE_SIZE		64
+#define FX_TEXTURE_SIZE		256
 
 extern uchar				g_heightmap[];
 extern ac_prop_t			*g_proptree;
@@ -202,6 +202,13 @@ void ac_renderer_start_fx(void);
 /// \sa ac_renderer_start_fx
 /// \sa ac_renderer_draw_tracer
 void ac_renderer_finish_fx(void);
+
+/// Draws a smoke particle at the given position with the given scale and alpha.
+/// \param pos			position of the smoke particle
+/// \param scale		scale of the particle
+/// \param alpha		alpha (transparency) value of the particle
+/// \param angle		angle by which to rotate the particle
+void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 
 /// Draws a bullet tracer at the given position in the given direction.
 /// \note				Must be called *after* \ref ac_renderer_start_fx and
