@@ -12,6 +12,9 @@
 #include <SDL/SDL_opengl.h>
 #include <GL/glu.h>
 
+#define SCREEN_WIDTH		1024
+#define SCREEN_HEIGHT		768
+
 // convenience define for a GL 4x4 matrix
 typedef GLfloat	GLmatrix_t[16];
 
@@ -41,14 +44,14 @@ uchar		g_prop_indices[TREE_BASE + 2		// LOD 0
 							+ BLDG_FLAT_INDICES
 							+ BLDG_SLNT_INDICES];
 uchar		g_prop_texture[PROP_TEXTURE_SIZE * PROP_TEXTURE_SIZE];
-GLuint		g_propTex;
+uint		g_propTex;
 uint		g_propVBOs[2];
 
 // FX resources
 ac_vertex_t	g_fx_verts[4];
 uchar		g_fx_indices[4];
 uchar		g_fx_texture[2 * FX_TEXTURE_SIZE * FX_TEXTURE_SIZE];
-GLuint		g_fxTex;
+uint		g_fxTex;
 uint		g_fxVBOs[2];
 
 // counters for measuring performance
@@ -61,6 +64,13 @@ uint		*g_culledPatchCounter;
 ac_vec4_t	g_frustum[6];
 
 ac_vec4_t	g_viewpoint;
+
+// FBO stuff
+uint		g_FBO;
+uint		g_depthRBO;
+uint		g_frameTex[2];	///< 0 - current frame, 1 - past frames
+							///< (in a mipmap-like formation)
+uint		g_2DTex;
 
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
@@ -721,6 +731,70 @@ void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {
 	glEnd();
 }
 
+bool ac_renderer_init_FBO(void) {
+	int i;
+	GLenum status;
+
+	// set frame textures up
+	glGenTextures(2, g_frameTex);
+	for (i = 0; i < 2; i++) {
+		glBindTexture(GL_TEXTURE_2D, g_frameTex[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		// don't need mipmaps
+		glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_FALSE);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SCREEN_WIDTH, SCREEN_HEIGHT,
+			0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+	}
+	glBindTexture(GL_TEXTURE_2D, 0);
+
+	// depth RBO initialization
+	glGenRenderbuffersEXT(1, &g_depthRBO);
+	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, g_depthRBO);
+	glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_DEPTH_COMPONENT,
+		SCREEN_WIDTH, SCREEN_HEIGHT);
+	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
+
+	// actual frame buffer object
+	glGenFramebuffersEXT(1, &g_FBO);
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBO);
+	// attach the texture to the colour attachment point
+	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+		GL_TEXTURE_2D, g_frameTex[0], 0);
+	// attach the renderbuffer to the depth attachment point
+	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
+		GL_RENDERBUFFER_EXT, g_depthRBO);
+
+	// check FBO status
+	status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+	if(status != GL_FRAMEBUFFER_COMPLETE_EXT) {
+		fprintf(stderr, "Incomplete frame buffer object: %s\n",
+			status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT ? "attachment"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT ? "dimensions"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_EXT ?
+				"draw buffer"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_FORMATS_EXT ? "formats"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_COUNT_EXT ?
+				"layer count"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_EXT ?
+				"layer targets"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_EXT ?
+				"missing attachment"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT ?
+				"multisample"
+			: status == GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_EXT ?
+				"read buffer"
+			: "unsupported");
+		return false;
+	}
+
+	// switch back to window-system-provided framebuffer
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+	return true;
+}
+
 bool ac_renderer_init(uint *vcounter, uint *tcounter,
 					uint *dpcounter, uint *cpcounter) {
 	float fogcolour[] = {0, 0, 0, 1};
@@ -734,7 +808,8 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
-	if (!(g_screen = SDL_SetVideoMode(1024, 768, 24, SDL_OPENGL))) {
+	if (!(g_screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT,
+									24, SDL_OPENGL))) {
 		fprintf(stderr, "SDL_SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
@@ -787,6 +862,10 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	// set line smoothing
 	glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
 
+	// initialize FBO
+	if (!ac_renderer_init_FBO())
+		return false;
+
 	// generate resources
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
@@ -801,10 +880,17 @@ void ac_renderer_shutdown(void) {
 	// FIXME: move to somewhere more appropriate
 	ac_gen_free_proptree(NULL);
 
-	glDeleteBuffersARB(2, g_propVBOs);
+	glDeleteFramebuffersEXT(1, &g_FBO);
 
+	glDeleteRenderbuffersEXT(1, &g_depthRBO);
+
+	glDeleteBuffersARB(2, g_propVBOs);
+	glDeleteBuffersARB(2, g_fxVBOs);
+
+	glDeleteTextures(2, g_frameTex);
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_propTex);
+	glDeleteTextures(1, &g_fxTex);
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }
@@ -838,8 +924,12 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 
 	g_viewpoint = vp->origin;
 
+	// activate FBO
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBO);
+	/*glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+		GL_TEXTURE_2D, g_frameTex[0], 0);*/
+
 	// clear buffers
-	//glClearColor(0.f, 0.75f, 1.f, 1.f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	// flick some switches for the 3D rendering
@@ -902,10 +992,42 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 }
 
 void ac_renderer_finish_3D(void) {
+	// switch the FBO colour attachment to the 2D one
+	/*glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+		GL_TEXTURE_2D, g_2DTex, 0);*/
 
+	// this is useless in 2D drawing
+	glDisable(GL_DEPTH_TEST);
+
+	// switch to 2D rendering
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT, -1, 1);
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+void ac_renderer_finish_2D(void) {
+	// switch back to system-provided FBO
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 }
 
 void ac_renderer_composite(bool negative) {
+	// TODO
+	// for now just draw a screen-aligned quad
+	glBindTexture(GL_TEXTURE_2D, g_frameTex[0]);
+	glColor4f(1, 1, 1, 1);
+	glBegin(GL_TRIANGLE_STRIP);
+	glTexCoord2f(0, 0);
+	glVertex2i(0, 0);
+	glTexCoord2f(0, 1);
+	glVertex2i(0, SCREEN_HEIGHT);
+	glTexCoord2f(1, 0);
+	glVertex2i(SCREEN_WIDTH, 0);
+	glTexCoord2f(1, 1);
+	glVertex2i(SCREEN_WIDTH, SCREEN_HEIGHT);
+	glEnd();
 	// dump everything to screen
 	SDL_GL_SwapBuffers();
 }

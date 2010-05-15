@@ -517,5 +517,6 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	ac_renderer_finish_fx();
 
 	ac_renderer_finish_3D();
+	ac_renderer_finish_2D();
 	ac_renderer_composite(false);
 }
