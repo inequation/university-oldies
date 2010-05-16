@@ -134,7 +134,7 @@ ac_vec4_t ac_game_collide(ac_vec4_t p1, ac_vec4_t p2) {
 }
 
 int ac_game_particle_cmp(const void *p1, const void *p2) {
-	float diff;
+	float diff, d1, d2;
 	// push inactive particles towards the end of the array
 	if (((particle_t *)p1)->weap == WP_NONE)
 		return 1;
@@ -144,6 +144,7 @@ int ac_game_particle_cmp(const void *p1, const void *p2) {
 	// cast the particle positions onto the view axis
 	diff = ac_vec_dot(((particle_t *)p1)->pos, g_forward)
 		- ac_vec_dot(((particle_t *)p2)->pos, g_forward);
+	// also find the nearest and farthest particles
 	if (diff < 0.f)	// p1 is closer than p2, draw p2 first
 		return 1;
 	if (diff > 0.f)	// p2 is closer than p1, draw p1 first
@@ -156,7 +157,7 @@ void ac_game_advance_particles(float t) {
 	int i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t tmp;
-	float f, g;
+	float f, g = 1.f;
 	particle_t *p;
 
 	// we need the proper Z-order, so sort the particle array first
@@ -287,7 +288,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->pos = pos;
 				p->alpha = 1.f;
 				p->scale = (j % 2 == 0 ? 9.5 : 6.5) + 0.001 * (rand() % 1001);
-				p->life = 8;
+				p->life = 8.75 + 0.005 * (rand() % 101);
 				p->angle = 0.01 * (rand() % 628);
 				if (j < 9)
 					dir = ac_vec_set(

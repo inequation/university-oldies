@@ -66,11 +66,14 @@ ac_vec4_t	g_frustum[6];
 ac_vec4_t	g_viewpoint;
 
 // FBO stuff
-uint		g_FBO;
+#define FRAME_TRACE	6
+uint		g_FBOs[2 + FRAME_TRACE];
 uint		g_depthRBO;
-uint		g_frameTex[2];	///< 0 - current frame, 1 - past frames
-							///< (in a mipmap-like formation)
 uint		g_2DTex;
+uint		g_frameTex[1 + FRAME_TRACE];	///< 0 - current frame, > 0 -
+											///< previous ones
+uint		g_currentFBO = 0;
+#define FBO_2D		0
 
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
@@ -735,21 +738,6 @@ bool ac_renderer_init_FBO(void) {
 	int i;
 	GLenum status;
 
-	// set frame textures up
-	glGenTextures(2, g_frameTex);
-	for (i = 0; i < 2; i++) {
-		glBindTexture(GL_TEXTURE_2D, g_frameTex[i]);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
-		// don't need mipmaps
-		glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_FALSE);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, SCREEN_WIDTH, SCREEN_HEIGHT,
-			0, GL_RGBA, GL_UNSIGNED_BYTE, 0);
-	}
-	glBindTexture(GL_TEXTURE_2D, 0);
-
 	// depth RBO initialization
 	glGenRenderbuffersEXT(1, &g_depthRBO);
 	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, g_depthRBO);
@@ -757,39 +745,64 @@ bool ac_renderer_init_FBO(void) {
 		SCREEN_WIDTH, SCREEN_HEIGHT);
 	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
 
-	// actual frame buffer object
-	glGenFramebuffersEXT(1, &g_FBO);
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBO);
-	// attach the texture to the colour attachment point
-	glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
-		GL_TEXTURE_2D, g_frameTex[0], 0);
-	// attach the renderbuffer to the depth attachment point
-	glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT, GL_DEPTH_ATTACHMENT_EXT,
-		GL_RENDERBUFFER_EXT, g_depthRBO);
+	// set frame textures up
+	glGenTextures(sizeof(g_frameTex) / sizeof(g_frameTex[0]), g_frameTex);
+	glGenTextures(1, &g_2DTex);
+	glGenFramebuffersEXT(sizeof(g_FBOs) / sizeof(g_FBOs[0]), g_FBOs);
+	for (i = 0; i < sizeof(g_FBOs) / sizeof(g_FBOs[0]); i++) {
+		if (i == FBO_2D)
+			glBindTexture(GL_TEXTURE_2D, g_2DTex);
+		else
+			glBindTexture(GL_TEXTURE_2D, g_frameTex[i - 1]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+		// don't need mipmaps
+		glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_FALSE);
+		if (i == FBO_2D)
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
+				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+				NULL);
+		else
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
+				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE,
+				NULL);
 
-	// check FBO status
-	status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
-	if(status != GL_FRAMEBUFFER_COMPLETE_EXT) {
-		fprintf(stderr, "Incomplete frame buffer object: %s\n",
-			status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT ? "attachment"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT ? "dimensions"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_EXT ?
-				"draw buffer"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_FORMATS_EXT ? "formats"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_COUNT_EXT ?
-				"layer count"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_EXT ?
-				"layer targets"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_EXT ?
-				"missing attachment"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT ?
-				"multisample"
-			: status == GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_EXT ?
-				"read buffer"
-			: "unsupported");
-		return false;
+		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[i]);
+		// attach the texture to the colour attachment point
+		glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
+			GL_TEXTURE_2D, i == FBO_2D ? g_2DTex : g_frameTex[i - 1], 0);
+		// attach the renderbuffer to the depth attachment point
+		glFramebufferRenderbufferEXT(GL_FRAMEBUFFER_EXT,
+			GL_DEPTH_ATTACHMENT_EXT, GL_RENDERBUFFER_EXT, g_depthRBO);
+
+		// check FBO status
+		status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
+		if(status != GL_FRAMEBUFFER_COMPLETE_EXT) {
+			fprintf(stderr, "Incomplete frame buffer object: %s\n",
+				status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT ?
+					"attachment"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT ?
+					"dimensions"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_DRAW_BUFFER_EXT ?
+					"draw buffer"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_FORMATS_EXT ? "formats"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_COUNT_EXT ?
+					"layer count"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_LAYER_TARGETS_EXT ?
+					"layer targets"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT_EXT ?
+					"missing attachment"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE_EXT ?
+					"multisample"
+				: status == GL_FRAMEBUFFER_INCOMPLETE_READ_BUFFER_EXT ?
+					"read buffer"
+				: "unsupported");
+			return false;
+		}
 	}
-
+	glBindTexture(GL_TEXTURE_2D, 0);
 	// switch back to window-system-provided framebuffer
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 	return true;
@@ -880,14 +893,15 @@ void ac_renderer_shutdown(void) {
 	// FIXME: move to somewhere more appropriate
 	ac_gen_free_proptree(NULL);
 
-	glDeleteFramebuffersEXT(1, &g_FBO);
+	glDeleteFramebuffersEXT(sizeof(g_FBOs) / sizeof(g_FBOs[0]), g_FBOs);
 
 	glDeleteRenderbuffersEXT(1, &g_depthRBO);
 
 	glDeleteBuffersARB(2, g_propVBOs);
 	glDeleteBuffersARB(2, g_fxVBOs);
 
-	glDeleteTextures(2, g_frameTex);
+	glDeleteTextures(sizeof(g_frameTex) / sizeof(g_frameTex[0]), g_frameTex);
+	glDeleteTextures(1, &g_2DTex);
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_propTex);
 	glDeleteTextures(1, &g_fxTex);
@@ -924,10 +938,13 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 
 	g_viewpoint = vp->origin;
 
+	// scroll the FBO
+	g_currentFBO = (g_currentFBO + 1) % (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
+	if (g_currentFBO == FBO_2D)	//
+		g_currentFBO++;
+
 	// activate FBO
-	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBO);
-	/*glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
-		GL_TEXTURE_2D, g_frameTex[0], 0);*/
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[g_currentFBO]);
 
 	// clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -992,20 +1009,50 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 }
 
 void ac_renderer_finish_3D(void) {
-	// switch the FBO colour attachment to the 2D one
-	/*glFramebufferTexture2DEXT(GL_FRAMEBUFFER_EXT, GL_COLOR_ATTACHMENT0_EXT,
-		GL_TEXTURE_2D, g_2DTex, 0);*/
+	// switch to the 2D FBO
+	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[FBO_2D]);
 
-	// this is useless in 2D drawing
+	glClear(GL_COLOR_BUFFER_BIT);
+
+	// depth testing is useless, or even harmful in 2D drawing
 	glDisable(GL_DEPTH_TEST);
 
 	// switch to 2D rendering
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT, -1, 1);
+	glOrtho(0, 1, 0, 1, -1, 1);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
+
+	// temporary crosshairs
+	glColor4f(1, 1, 1, 1);
+	glLineWidth(3.f);
+	glBegin(GL_LINES);
+	glVertex2f(0.4, 0.5);
+	glVertex2f(0.47, 0.5);
+
+	glVertex2f(0.53, 0.5);
+	glVertex2f(0.6, 0.5);
+
+	glVertex2f(0.5, 0.4);
+	glVertex2f(0.5, 0.47);
+
+	glVertex2f(0.5, 0.53);
+	glVertex2f(0.5, 0.6);
+
+	glVertex2f(0.47, 0.47);
+	glVertex2f(0.53, 0.47);
+
+	glVertex2f(0.47, 0.53);
+	glVertex2f(0.53, 0.53);
+
+	glVertex2f(0.47, 0.47);
+	glVertex2f(0.47, 0.53);
+
+	glVertex2f(0.53, 0.47);
+	glVertex2f(0.53, 0.53);
+	glEnd();
 }
 
 void ac_renderer_finish_2D(void) {
@@ -1016,18 +1063,33 @@ void ac_renderer_finish_2D(void) {
 void ac_renderer_composite(bool negative) {
 	// TODO
 	// for now just draw a screen-aligned quad
-	glBindTexture(GL_TEXTURE_2D, g_frameTex[0]);
 	glColor4f(1, 1, 1, 1);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glEnable(GL_BLEND);
+	// mind you that the frame texture #0 is attached to FBO #1
+	glBindTexture(GL_TEXTURE_2D, g_frameTex[g_currentFBO - 1]);
 	glBegin(GL_TRIANGLE_STRIP);
 	glTexCoord2f(0, 0);
-	glVertex2i(0, 0);
+	glVertex2f(0, 0);
 	glTexCoord2f(0, 1);
-	glVertex2i(0, SCREEN_HEIGHT);
+	glVertex2f(0, 1);
 	glTexCoord2f(1, 0);
-	glVertex2i(SCREEN_WIDTH, 0);
+	glVertex2f(1, 0);
 	glTexCoord2f(1, 1);
-	glVertex2i(SCREEN_WIDTH, SCREEN_HEIGHT);
+	glVertex2f(1, 1);
 	glEnd();
+	glBindTexture(GL_TEXTURE_2D, g_2DTex);
+	glBegin(GL_TRIANGLE_STRIP);
+	glTexCoord2f(0, 0);
+	glVertex2f(0, 0);
+	glTexCoord2f(0, 1);
+	glVertex2f(0, 1);
+	glTexCoord2f(1, 0);
+	glVertex2f(1, 0);
+	glTexCoord2f(1, 1);
+	glVertex2f(1, 1);
+	glEnd();
+	glDisable(GL_BLEND);
 	// dump everything to screen
 	SDL_GL_SwapBuffers();
 }
