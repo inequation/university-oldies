@@ -45,8 +45,13 @@ inline ac_vec4_t ac_vec_ma(ac_vec4_t a, ac_vec4_t b, ac_vec4_t c) {
 }
 
 inline float ac_vec_dot(ac_vec4_t a, ac_vec4_t b) {
-	ac_vec4_t tmp = ac_vec_mul(a, b);
+    // NOTE: this code causes segfaults on win32 for some bizarre reason...
+#ifndef WIN32
+    ac_vec4_t tmp = ac_vec_mul(a, b);
 	return tmp.f[0] + tmp.f[1] + tmp.f[2]/* + tmp.f[3]*/;
+#else
+    return a.f[0] * b.f[0] + a.f[1] * b.f[1] + a.f[2] * b.f[2];
+#endif
 }
 
 inline ac_vec4_t ac_vec_cross(ac_vec4_t a, ac_vec4_t b) {
