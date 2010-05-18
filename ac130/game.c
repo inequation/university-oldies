@@ -134,7 +134,7 @@ ac_vec4_t ac_game_collide(ac_vec4_t p1, ac_vec4_t p2) {
 }
 
 int ac_game_particle_cmp(const void *p1, const void *p2) {
-	float diff, d1, d2;
+	float diff;
 	// push inactive particles towards the end of the array
 	if (((particle_t *)p1)->weap == WP_NONE)
 		return 1;
@@ -262,18 +262,18 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->angle = 0.01 * (rand() % 628);
 				if (j < 6)
 					dir = ac_vec_set(
-						-30 + rand() % 61,
-						90,
-						-30 + rand() % 61,
+						-30000 + rand() % 60001,
+						90000,
+						-30000 + rand() % 60001,
 						0);
 				else
 					dir = ac_vec_set(
-						-50 + rand() % 101,
-						rand() % 40,
-						-50 + rand() % 101,
+						-50000 + rand() % 100001,
+						rand() % 4000,
+						-50000 + rand() % 100001,
 						0);
 				dir = ac_vec_normalize(dir);
-				p->vel = ac_vec_mulf(dir, 40.f);
+				p->vel = ac_vec_mulf(dir, 35 + rand() % 11);
 				j++;
 			}
 			break;
@@ -292,18 +292,18 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->angle = 0.01 * (rand() % 628);
 				if (j < 9)
 					dir = ac_vec_set(
-						-30 + rand() % 61,
-						90,
-						-30 + rand() % 61,
+						-30000 + rand() % 60001,
+						90000,
+						-30000 + rand() % 60001,
 						0);
 				else
 					dir = ac_vec_set(
-						-50 + rand() % 101,
-						rand() % 40,
-						-50 + rand() % 101,
+						-50000 + rand() % 100001,
+						rand() % 40000,
+						-50000 + rand() % 100001,
 						0);
 				dir = ac_vec_normalize(dir);
-				p->vel = ac_vec_mulf(dir, 140.f);
+				p->vel = ac_vec_mulf(dir, 130 + rand() % 21);
 				j++;
 			}
 			break;
@@ -506,10 +506,9 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		memcpy(&vp, &g_viewpoint, sizeof(vp));
 		vp.angles[0] += (-0.0175 + 0.000035 * (rand() % 1001)) * lerp;
 		vp.angles[1] += (-0.0175 + 0.000035 * (rand() % 1001)) * lerp;
-		ac_renderer_start_scene(&vp);
-		//ac_renderer_start_scene(&g_viewpoint);
+		ac_renderer_start_scene(ticks, &vp);
 	} else
-		ac_renderer_start_scene(&g_viewpoint);
+		ac_renderer_start_scene(ticks, &g_viewpoint);
 
 	// advance the non-player elements of the world
 	ac_game_advance_projectiles();

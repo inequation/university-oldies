@@ -12,6 +12,10 @@
 #include <SDL/SDL_opengl.h>
 #include <GL/glu.h>
 
+#define STRINGIFY(A)  #A
+#include "compositor_vs.glsl"
+#include "compositor_fs.glsl"
+
 #define SCREEN_WIDTH		1024
 #define SCREEN_HEIGHT		768
 
@@ -66,14 +70,20 @@ ac_vec4_t	g_frustum[6];
 ac_vec4_t	g_viewpoint;
 
 // FBO stuff
-#define FRAME_TRACE	6
+#define FRAME_TRACE	5
 uint		g_FBOs[2 + FRAME_TRACE];
 uint		g_depthRBO;
 uint		g_2DTex;
 uint		g_frameTex[1 + FRAME_TRACE];	///< 0 - current frame, > 0 -
 											///< previous ones
-uint		g_currentFBO = 0;
+uint		g_currentFBO = 1;
 #define FBO_2D		0
+
+uint		g_compositor = 0;
+uint		g_comp_vs = 0;
+uint		g_comp_fs = 0;
+int			g_comp_2D = -1;
+int			g_comp_frames = -1;
 
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
@@ -734,6 +744,91 @@ void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {
 	glEnd();
 }
 
+bool ac_renderer_shader_check(GLuint obj, GLenum what, char *desc) {
+	int retval, loglen;
+	glGetObjectParameterivARB(obj, what, &retval);
+	glGetObjectParameterivARB(obj, GL_OBJECT_INFO_LOG_LENGTH_ARB, &loglen);
+	if (retval != GL_TRUE || loglen > 3) {
+		char *p = malloc(loglen + 1);
+		glGetInfoLogARB(obj, loglen, NULL, p);
+		fprintf(stderr, "%s %s:\n%s\n", desc,
+			retval == GL_TRUE ? "warning" : "error", p);
+		free(p);
+		if (retval != GL_TRUE)
+			return false;
+	}
+	return true;
+}
+
+inline bool ac_renderer_create_program(const char *vss, const char *fss,
+	uint *vs, uint *fs, uint *prog) {
+	*vs = glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
+	*fs = glCreateShaderObjectARB(GL_FRAGMENT_SHADER_ARB);
+	// shut up compiler...
+	glShaderSourceARB(*vs, 1, (const char **)&vss, NULL);
+	glShaderSourceARB(*fs, 1, (const char **)&fss, NULL);
+
+	// compile vertex shader
+	glCompileShaderARB(*vs);
+	if (!ac_renderer_shader_check(*vs, GL_OBJECT_COMPILE_STATUS_ARB,
+		"Vertex shader compilation"))
+		return false;
+
+	// compile fragment shader
+	glCompileShaderARB(*fs);
+	if (!ac_renderer_shader_check(*fs, GL_OBJECT_COMPILE_STATUS_ARB,
+		"Fragment shader compilation"))
+		return false;
+
+	// link the program together
+	*prog = glCreateProgramObjectARB();
+	glAttachObjectARB(*prog, *vs);
+	glAttachObjectARB(*prog, *fs);
+	glLinkProgramARB(*prog);
+	if (!ac_renderer_shader_check(*prog, GL_OBJECT_LINK_STATUS_ARB,
+		"GPU program linking"))
+		return false;
+
+	// validate the program
+	glValidateProgramARB(*prog);
+	if (!ac_renderer_shader_check(*prog, GL_OBJECT_VALIDATE_STATUS_ARB,
+		"GPU program validation"))
+		return false;
+
+	return true;
+}
+
+bool ac_renderer_create_shaders(void) {
+	int i, frames[1 + FRAME_TRACE];
+
+	// create the compositor GPU program
+	if (!ac_renderer_create_program(COMPOSITOR_VS, COMPOSITOR_FS,
+		&g_comp_vs, &g_comp_fs, &g_compositor)) {
+		return false;
+	}
+
+	// find uniform locations
+	glUseProgramObjectARB(g_compositor);
+	if ((g_comp_2D = glGetUniformLocationARB(g_compositor, "overlay")) < 0) {
+		fprintf(stderr, "Failed to find overlay uniform variable\n");
+		return false;
+	}
+	if ((g_comp_frames = glGetUniformLocationARB(g_compositor, "frames")) < 0) {
+		fprintf(stderr, "Failed to find frames uniform variable\n");
+		return false;
+	}
+	// texture slots are constant, so set them already
+	glUniform1iARB(g_comp_2D, 0);	// 2D overlay at GL_TEXTURE0
+	// fill the frames array; frames at GL_TEXTURE1 + i
+	for (i = 0; i < 1 + FRAME_TRACE; i++)
+		frames[i] = i + 1;
+	glUniform1ivARB(g_comp_frames, 1 + FRAME_TRACE, frames);
+
+	glUseProgramObjectARB(0);
+
+	return true;
+}
+
 bool ac_renderer_init_FBO(void) {
 	int i;
 	GLenum status;
@@ -765,8 +860,8 @@ bool ac_renderer_init_FBO(void) {
 				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 				NULL);
 		else
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
-				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE,
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8,
+				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE,
 				NULL);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[i]);
@@ -780,7 +875,7 @@ bool ac_renderer_init_FBO(void) {
 		// check FBO status
 		status = glCheckFramebufferStatusEXT(GL_FRAMEBUFFER_EXT);
 		if(status != GL_FRAMEBUFFER_COMPLETE_EXT) {
-			fprintf(stderr, "Incomplete frame buffer object: %s\n",
+			fprintf(stderr, "Incomplete frame buffer object #%d: %s\n", i,
 				status == GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT_EXT ?
 					"attachment"
 				: status == GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT ?
@@ -848,6 +943,14 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 		fprintf(stderr, "Hardware does not support vertex buffer objects\n");
 		return false;
 	}
+	if (!GLEW_ARB_multitexture) {
+		fprintf(stderr, "Hardware does not support multitexturing\n");
+		return false;
+	}
+	if (!GLEW_ARB_fragment_shader) {
+		fprintf(stderr, "Hardware does not support fragment shaders\n");
+		return false;
+	}
 
 	// all geometry uses vertex and index arrays
 	glEnableClientState(GL_VERTEX_ARRAY);
@@ -879,6 +982,10 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	if (!ac_renderer_init_FBO())
 		return false;
 
+	// initialize shaders
+	if (!ac_renderer_create_shaders())
+		return false;
+
 	// generate resources
 	ac_renderer_fill_terrain_indices();
 	ac_renderer_fill_terrain_vertices();
@@ -905,6 +1012,13 @@ void ac_renderer_shutdown(void) {
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_propTex);
 	glDeleteTextures(1, &g_fxTex);
+
+	glDetachObjectARB(g_compositor, g_comp_vs);
+	glDetachObjectARB(g_compositor, g_comp_fs);
+	glDeleteObjectARB(g_comp_vs);
+	glDeleteObjectARB(g_comp_fs);
+	glDeleteObjectARB(g_compositor);
+
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }
@@ -924,7 +1038,8 @@ void ac_renderer_set_heightmap(void) {
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-void ac_renderer_start_scene(ac_viewpoint_t *vp) {
+void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
+	static int lastTime = 0;
 	static GLmatrix_t m = {
 		1, 0, 0, 0,	// 0
 		0, 1, 0, 0,	// 4
@@ -938,10 +1053,13 @@ void ac_renderer_start_scene(ac_viewpoint_t *vp) {
 
 	g_viewpoint = vp->origin;
 
-	// scroll the FBO
-	g_currentFBO = (g_currentFBO + 1) % (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
-	if (g_currentFBO == FBO_2D)	//
-		g_currentFBO++;
+	// scroll the FBO every 27 ms
+	if (time - lastTime >= 27) {
+		g_currentFBO = (g_currentFBO + 1) % (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
+		if (g_currentFBO == FBO_2D)	//
+			g_currentFBO++;
+		lastTime = time;
+	}
 
 	// activate FBO
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[g_currentFBO]);
@@ -1061,24 +1179,24 @@ void ac_renderer_finish_2D(void) {
 }
 
 void ac_renderer_composite(bool negative) {
-	// TODO
-	// for now just draw a screen-aligned quad
-	glColor4f(1, 1, 1, 1);
+	int i;
+
 	glClear(GL_COLOR_BUFFER_BIT);
-	glEnable(GL_BLEND);
-	// mind you that the frame texture #0 is attached to FBO #1
-	glBindTexture(GL_TEXTURE_2D, g_frameTex[g_currentFBO - 1]);
-	glBegin(GL_TRIANGLE_STRIP);
-	glTexCoord2f(0, 0);
-	glVertex2f(0, 0);
-	glTexCoord2f(0, 1);
-	glVertex2f(0, 1);
-	glTexCoord2f(1, 0);
-	glVertex2f(1, 0);
-	glTexCoord2f(1, 1);
-	glVertex2f(1, 1);
-	glEnd();
+	glUseProgramObjectARB(g_compositor);
+
+	glActiveTextureARB(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, g_2DTex);
+	// mind you that the frame texture #0 is attached to FBO #1
+	//printf("Frames: ");
+	for (i = 0; i < 1 + FRAME_TRACE; i++) {
+		glActiveTextureARB(GL_TEXTURE1 + i);
+		glBindTexture(GL_TEXTURE_2D, g_frameTex[(g_currentFBO - 1 + i)
+						% (1 + FRAME_TRACE)]);
+		//printf("%d=%d ", i, (g_currentFBO - 1 + i) % (1 + FRAME_TRACE));
+	}
+	//printf("\n");
+	glActiveTextureARB(GL_TEXTURE0);
+
 	glBegin(GL_TRIANGLE_STRIP);
 	glTexCoord2f(0, 0);
 	glVertex2f(0, 0);
@@ -1089,7 +1207,9 @@ void ac_renderer_composite(bool negative) {
 	glTexCoord2f(1, 1);
 	glVertex2f(1, 1);
 	glEnd();
-	glDisable(GL_BLEND);
+
+	glUseProgramObjectARB(0);
+
 	// dump everything to screen
 	SDL_GL_SwapBuffers();
 }

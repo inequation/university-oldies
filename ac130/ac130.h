@@ -191,7 +191,7 @@ void ac_renderer_set_heightmap();
 
 /// Starts the rendering of the next frame. Also sts the point of view.
 /// \note				Must be called *before* \ref ac_renderer_finish3D
-void ac_renderer_start_scene(ac_viewpoint_t *vp);
+void ac_renderer_start_scene(int time, ac_viewpoint_t *vp);
 
 /// Starts the FX rendering stage - calls the necessary state changes, etc.
 /// \sa ac_renderer_finish_fx
