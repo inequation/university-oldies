@@ -99,6 +99,16 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="ac_math.h" />
+		<Unit filename="compositor_fs.glsl">
+			<Option target="Unix Debug" />
+			<Option target="Unix Release" />
+			<Option target="Win32 Debug" />
+		</Unit>
+		<Unit filename="compositor_vs.glsl">
+			<Option target="Unix Debug" />
+			<Option target="Unix Release" />
+			<Option target="Win32 Debug" />
+		</Unit>
 		<Unit filename="game.c">
 			<Option compilerVar="CC" />
 		</Unit>
