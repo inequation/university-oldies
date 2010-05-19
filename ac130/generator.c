@@ -221,7 +221,6 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	iofs = 0;
 	for (l = 0; l < 3; l++) {
 		base = TREE_BASE - l * 2;
-		// LOD 0: TREE_BASE + 2 triangles
 		rpi = (M_PI * 2.f) / (float)base;	// radians per iteration
 		indices[iofs++] = 0;	// start with the tip of the tree
 		// tree base vertices and indices

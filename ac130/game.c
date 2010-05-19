@@ -70,8 +70,13 @@ ac_viewpoint_t	g_viewpoint = {
 	0
 };
 
-#define SHAKE_TIME			0.4
+weap_t			g_weapon = WP_M61;
+
+#define SHAKE_TIME			0.45
 float			g_shake_time = 0;
+
+#define NEGATIVE_TIME		0.25
+float			g_neg_time = 0.000001;
 
 bool ac_game_init(void) {
 	// set new terrain heightmap
@@ -248,9 +253,9 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 			}
 			break;
 		case WP_L60:
-			pos = ac_vec_add(pos, ac_vec_set(0, 3, 0, 0));
+			pos = ac_vec_add(pos, ac_vec_set(0, 4, 0, 0));
 			for (i = 0, j = 0, p = g_particles;
-				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 12;
+				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 24;
 				i++, p++) {
 				if (p->weap != WP_NONE)
 					continue;
@@ -260,7 +265,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->scale = 3.5 + 0.001 * (rand() % 1001);
 				p->life = 5.75 + 0.005 * (rand() % 101);
 				p->angle = 0.01 * (rand() % 628);
-				if (j < 6)
+				if (j < 12)
 					dir = ac_vec_set(
 						-30000 + rand() % 60001,
 						90000,
@@ -273,14 +278,18 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 						-50000 + rand() % 100001,
 						0);
 				dir = ac_vec_normalize(dir);
-				p->vel = ac_vec_mulf(dir, 35 + rand() % 11);
+				if (j % 6 == 0)
+					dir = ac_vec_mulf(dir, 0.2);
+				else if (j % 6 == 1)
+					dir = ac_vec_mulf(dir, 0.4);
+				p->vel = ac_vec_mulf(dir, 10 + rand() % 16);
 				j++;
 			}
 			break;
 		case WP_M102:
 			pos = ac_vec_add(pos, ac_vec_set(0, 6, 0, 0));
 			for (i = 0, j = 0, p = g_particles;
-				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 18;
+				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 36;
 				i++, p++) {
 				if (p->weap != WP_NONE)
 					continue;
@@ -290,7 +299,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->scale = (j % 2 == 0 ? 9.5 : 6.5) + 0.001 * (rand() % 1001);
 				p->life = 8.75 + 0.005 * (rand() % 101);
 				p->angle = 0.01 * (rand() % 628);
-				if (j < 9)
+				if (j < 18)
 					dir = ac_vec_set(
 						-30000 + rand() % 60001,
 						90000,
@@ -303,6 +312,8 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 						-50000 + rand() % 100001,
 						0);
 				dir = ac_vec_normalize(dir);
+				if (j % 3 == 0)
+					dir = ac_vec_mulf(dir, 0.35);
 				p->vel = ac_vec_mulf(dir, 130 + rand() % 21);
 				j++;
 			}
@@ -344,19 +355,28 @@ void ac_game_advance_projectiles(void) {
 			g_projs[i].weap = WP_NONE;
 		}
 		g_projs[i].pos = ac_vec_sub(npos, ofs);
-		// add gravity
-		g_projs[i].vel = ac_vec_add(g_projs[i].vel, grav);
 		// draw tracers
 		switch (g_projs[i].weap) {
 			case WP_M61_TRACER:
 				ac_renderer_draw_tracer(g_projs[i].pos,
 					ac_vec_normalize(g_projs[i].vel), 3.f);
+			case WP_M61:	// intentional fall-through!
+				// add full gravity
+				g_projs[i].vel = ac_vec_add(g_projs[i].vel, grav);
 				break;
 			case WP_L60:
 				ac_renderer_draw_tracer(g_projs[i].pos,
 					ac_vec_normalize(g_projs[i].vel), 5.f);
+				// add reduced gravity
+				g_projs[i].vel = ac_vec_add(g_projs[i].vel,
+					ac_vec_mulf(grav, 0.5));
 				break;
-			default:
+			case WP_M102:
+				// add reduced gravity
+				g_projs[i].vel = ac_vec_add(g_projs[i].vel,
+					ac_vec_mulf(grav, 0.3));
+				break;
+			default:	// shut up compiler
 				break;
 		}
 	}
@@ -396,13 +416,12 @@ void ac_game_fire_weapon(weap_t w, float t) {
 	}
 }
 
-void ac_game_weapons_think(ac_input_t *in, float t, float ft) {
+void ac_game_player_think(ac_input_t *in, float t, float ft) {
 	// times since last shots
 	static float m61 = WEAP_FIREDELAY_M61;
 	static float l60 = WEAP_FIREDELAY_L60;
 	static float m102 = WEAP_FIREDELAY_M102;
-	static weap_t weap = WP_M61;
-	static bool rpressed = false;
+	static bool rpressed = false, npressed = false;
 
 	m61 += ft;
 	l60 += ft;
@@ -410,30 +429,30 @@ void ac_game_weapons_think(ac_input_t *in, float t, float ft) {
 
 	if (in->flags & INPUT_MOUSE_LEFT) {
 		// fire if the gun's cooled down already
-		switch (weap) {
+		switch (g_weapon) {
 			case WP_M61:
 				// this gun needs special handling - it fires at 6000 rpm, so
 				// make sure we get all the rounds out even if the FPS stutters
 				while (ft >= WEAP_FIREDELAY_M61) {
-					ac_game_fire_weapon(weap, t);
+					ac_game_fire_weapon(g_weapon, t);
 					ft -= WEAP_FIREDELAY_M61;
 				}
 				m61 += ft;
 				if (m61 >= WEAP_FIREDELAY_M61) {
 					m61 = 0;
-					ac_game_fire_weapon(weap, t);
+					ac_game_fire_weapon(g_weapon, t);
 				}
 				break;
 			case WP_L60:
 				if (l60 >= WEAP_FIREDELAY_L60) {
 					l60 = 0;
-					ac_game_fire_weapon(weap, t);
+					ac_game_fire_weapon(g_weapon, t);
 				}
 				break;
 			case WP_M102:
 				if (m102 >= WEAP_FIREDELAY_M102) {
 					m102 = 0;
-					ac_game_fire_weapon(weap, t);
+					ac_game_fire_weapon(g_weapon, t);
 				}
 				break;
 			default:
@@ -443,11 +462,20 @@ void ac_game_weapons_think(ac_input_t *in, float t, float ft) {
 	} else if (in->flags & INPUT_MOUSE_RIGHT && !rpressed) {
 		// cycle the weapons
 		rpressed = true;
-		weap++;
-		if (weap > WP_M102)
-			weap = WP_M61;
+		g_weapon++;
+		if (g_weapon > WP_M102)
+			g_weapon = WP_M61;
 	} else if (!(in->flags & INPUT_MOUSE_RIGHT))
 		rpressed = false;
+	if (in->flags & INPUT_NEGATIVE) {
+		// negative time means positive->negative transition
+		if (g_neg_time >= 0)
+			g_neg_time = -t;
+		else
+			g_neg_time = t;
+		npressed = true;
+	} else
+		npressed = false;
 }
 
 #define FLOATING_RADIUS		200.f
@@ -457,15 +485,34 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	float time = (float)ticks * 0.001;
 	float plane_angle = time * TIME_SCALE;
 	float fy, fp;
+	static float neg = 0.f;
 	ac_vec4_t tmp;
 	ac_viewpoint_t vp;
 
 	g_frameTimeVec = ac_vec_setall(frameTime);
 
+	// zoom based on weapon selection
+	switch (g_weapon) {
+		case WP_M61:
+			g_viewpoint.fov = M_PI * 0.02;
+			fy = 0.5;
+			break;
+		case WP_L60:
+			g_viewpoint.fov = M_PI * 0.04;
+			fy = 1.f;
+			break;
+		case WP_M102:
+			g_viewpoint.fov = M_PI * 0.08;
+			fy = 1.5f;
+			break;
+		default:	// shut up compiler
+			break;
+	}
+
 	// handle viewpoint movement
-	g_viewpoint.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE
+	g_viewpoint.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE * fy
 		+ frameTime * TIME_SCALE;	// keep the cam in sync with the plane
-	g_viewpoint.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE;
+	g_viewpoint.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE * fy;
 #if 1
 	if (g_viewpoint.angles[0] < -plane_angle + M_PI * 0.2)
 		g_viewpoint.angles[0] = -plane_angle + M_PI * 0.2;
@@ -488,7 +535,6 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 				sinf(plane_angle) * FLOATING_RADIUS,
 				0.f);
 	g_viewpoint.origin = ac_vec_add(tmp, g_viewpoint.origin);
-	g_viewpoint.fov = M_PI * 0.04;
 
 	// calculate firing axis
 	// apply bullet spread (~0,45 of a degree)
@@ -498,7 +544,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		-cosf(fp) * sinf(fy), sinf(fp), -cosf(fp) * cosf(fy), 0);
 
 	// operate the weapons
-	ac_game_weapons_think(input, time, frameTime);
+	ac_game_player_think(input, time, frameTime);
 
 	// generate another viewpoint (for gun shakes etc.)
 	if (time - g_shake_time <= SHAKE_TIME) {
@@ -518,5 +564,15 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 
 	ac_renderer_finish_3D();
 	ac_renderer_finish_2D();
-	ac_renderer_composite(false);
+	// negative time means positive->negative transition
+	if (g_neg_time < 0 && time + g_neg_time <= NEGATIVE_TIME) {
+		neg = (time + g_neg_time) / NEGATIVE_TIME;
+		if (neg > 1.f)
+			neg = 1.f;
+	} else if (g_neg_time > 0 && time - g_neg_time <= NEGATIVE_TIME) {
+		neg = 1.f - (time - g_neg_time) / NEGATIVE_TIME;
+		if (neg < 0.f)
+			neg = 0.f;
+	}
+	ac_renderer_composite(neg);
 }

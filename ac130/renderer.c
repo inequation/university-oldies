@@ -84,6 +84,7 @@ uint		g_comp_vs = 0;
 uint		g_comp_fs = 0;
 int			g_comp_2D = -1;
 int			g_comp_frames = -1;
+int			g_comp_neg = -1;
 
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
@@ -684,24 +685,12 @@ void ac_renderer_finish_fx(void) {
 
 void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
 	static GLmatrix_t m;
-	const float *p1 = &m[4], *p2 = &m[8];
 	float s = sinf(angle);
 	float c = cosf(angle);
-
-#if 0
-	ac_vec4_t p = ac_vec_add(pos, ac_vec_set(0, 10, 0, 0));
-	glColor4f(1, 0, 0, 1);
-	glBegin(GL_LINES);
-	glVertex3f(0, 200, 0);
-	glVertex3fv(pos.f);
-	glEnd();
-	glColor4f(1, 1, 1, 1);
-#endif
 
 	glPushMatrix();
 
 	// cheap, cheated sprites
-#if 1
 	glTranslatef(pos.f[0], pos.f[1], pos.f[2]);
 	glGetFloatv(GL_MODELVIEW_MATRIX, m);
 	// nullify the rotation part of the matrix
@@ -711,20 +700,6 @@ void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
 	m[4] = scale * -s;
 	m[5] = scale * c;
 	m[10] = scale;
-#else
-	glGetFloatv(GL_MODELVIEW_MATRIX, m);
-	// translate
-	m[12] += ac_vec_dot(*((ac_vec4_t *)&m), pos);
-	m[13] += ac_vec_dot(*((ac_vec4_t *)&p1), pos);
-	m[14] += ac_vec_dot(*((ac_vec4_t *)&p2), pos);
-	// nullify the rotation part of the matrix
-	memset(m, 0, sizeof(m[0]) * 3 * 4);
-	m[0] = scale;
-	m[1] = sinf(angle);
-	m[4] = -sinf(angle);
-	m[5] = scale * scale * (1.f - cosf(angle)) + cosf(angle);
-	m[10] = scale;
-#endif
 	// reload the matrix
 	glLoadMatrixf(m);
 
@@ -815,6 +790,10 @@ bool ac_renderer_create_shaders(void) {
 	}
 	if ((g_comp_frames = glGetUniformLocationARB(g_compositor, "frames")) < 0) {
 		fprintf(stderr, "Failed to find frames uniform variable\n");
+		return false;
+	}
+	if ((g_comp_neg = glGetUniformLocationARB(g_compositor, "negative")) < 0) {
+		fprintf(stderr, "Failed to find negative uniform variable\n");
 		return false;
 	}
 	// texture slots are constant, so set them already
@@ -973,7 +952,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);
 	glFogfv(GL_FOG_COLOR, fogcolour);
-	glFogf(GL_FOG_DENSITY, 0.0025);
+	glFogf(GL_FOG_DENSITY, 0.002);
 
 	// set line smoothing
 	glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
@@ -1178,11 +1157,12 @@ void ac_renderer_finish_2D(void) {
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
 }
 
-void ac_renderer_composite(bool negative) {
+void ac_renderer_composite(float negative) {
 	int i;
 
 	glClear(GL_COLOR_BUFFER_BIT);
 	glUseProgramObjectARB(g_compositor);
+	glUniform1fARB(g_comp_neg, negative);
 
 	glActiveTextureARB(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, g_2DTex);

@@ -232,8 +232,9 @@ void ac_renderer_finish_2D(void);
 
 /// Combines the 3D and 2D parts of the scene, runs post-processing effects and
 /// outputs the frame to screen.
-/// \param negative		if true, inverts display colours
-void ac_renderer_composite(bool negative);
+/// \param negative		fraction of display negative influence (for smooth
+///						positive-negative transitions)
+void ac_renderer_composite(float negative);
 
 // =========================================================
 // Game logic interface
