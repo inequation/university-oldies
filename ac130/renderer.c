@@ -97,9 +97,12 @@ uint		g_font_fs = 0;
 uint		g_compositor = 0;
 uint		g_comp_vs = 0;
 uint		g_comp_fs = 0;
-int			g_comp_2D = -1;
 int			g_comp_frames = -1;
 int			g_comp_neg = -1;
+int			g_comp_contrast = -1;
+
+// uncomment to enable GLSL pseudo-instancing
+#define USE_INSTANCING
 
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
@@ -518,16 +521,21 @@ void ac_renderer_create_fx(void) {
 }
 
 void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
+#ifndef USE_INSTANCING
 	static GLmatrix_t m = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
 		0, 0, 1, 0,
 		1, 0, 0, 1
 	};
+#endif // USE_INSTANCING
 
 	if (node->trees != NULL) {
 		int i;
-		float c, s, d2;
+		float d2;
+#ifndef USE_INSTANCING
+		float c, s;
+#endif
 		ac_tree_t *t;
 		int ofs, num;
 		// pick level of detail
@@ -548,6 +556,7 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 		}
 
 		for (t = node->trees, i = 0; i < TREES_PER_FIELD; i++, t++) {
+#ifndef USE_INSTANCING
 			glPushMatrix();
 
 			c = cosf(t->ang);
@@ -574,18 +583,28 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 			//m[15] = 1;*/
 			ac_vec_tofloat(t->pos, &m[12]);
 			glMultMatrixf(m);
+#else
+			glMultiTexCoord3fv(GL_TEXTURE1, t->pos.f);
+			glMultiTexCoord4f(GL_TEXTURE2, t->XZscale, t->Yscale, t->XZscale,
+				t->ang);
+#endif // USE_INSTANCING
 
 			glDrawElements(GL_TRIANGLE_FAN, num, GL_UNSIGNED_BYTE, (void *)ofs);
 			*g_vertCounter += num - 1;
 			*g_triCounter += num - 2;
 
+#ifndef USE_INSTANCING
 			glPopMatrix();
+#endif // USE_INSTANCING
 		}
 	} else if (node->bldgs != NULL) {
 		int i;
+#ifndef USE_INSTANCING
 		float c, s;
+#endif
 		ac_bldg_t *b;
 		for (b = node->bldgs, i = 0; i < BLDGS_PER_FIELD; i++, b++) {
+#ifndef USE_INSTANCING
 			glPushMatrix();
 
 			c = cosf(b->ang);
@@ -612,6 +631,11 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 			//m[15] = 1;*/
 			ac_vec_tofloat(b->pos, &m[12]);
 			glMultMatrixf(m);
+#else
+			glMultiTexCoord3fv(GL_TEXTURE1, b->pos.f);
+			glMultiTexCoord4f(GL_TEXTURE2, b->Xscale, b->Yscale, b->Zscale,
+				b->ang);
+#endif // USE_INSTANCING
 
 			if (b->slantedRoof) {
 				glDrawElements(GL_TRIANGLE_STRIP, BLDG_SLNT_INDICES,
@@ -626,7 +650,9 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 				*g_triCounter += BLDG_SLNT_INDICES - 2;
 			}
 
+#ifndef USE_INSTANCING
 			glPopMatrix();
+#endif // USE_INSTANCING
 		}
 	} else if (node->child[0] != NULL) {
 		// it's enough to just check the existence of the 1st child because a
@@ -668,10 +694,16 @@ void ac_renderer_draw_props(void) {
 					(void *)offsetof(ac_vertex_t, pos.f[0]));
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, st[0]));
+#ifdef USE_INSTANCING
+	glUseProgramObjectARB(g_propProgram);
+#endif // USE_INSTANCING
 
 	ac_renderer_recurse_proptree(g_proptree, PROPMAP_SIZE / 2);
-	// bring the previous state back
 
+	// bring the previous state back
+#ifdef USE_INSTANCING
+	glUseProgramObjectARB(0);
+#endif // USE_INSTANCING
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);
@@ -734,14 +766,15 @@ void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {
 	glEnd();
 }
 
-bool ac_renderer_shader_check(GLuint obj, GLenum what, char *desc) {
+bool ac_renderer_shader_check(GLuint obj, GLenum what,
+		const char *id, char *desc) {
 	int retval, loglen;
 	glGetObjectParameterivARB(obj, what, &retval);
 	glGetObjectParameterivARB(obj, GL_OBJECT_INFO_LOG_LENGTH_ARB, &loglen);
 	if (retval != GL_TRUE || loglen > 3) {
 		char *p = malloc(loglen + 1);
 		glGetInfoLogARB(obj, loglen, NULL, p);
-		fprintf(stderr, "%s %s:\n%s\n", desc,
+		fprintf(stderr, "%s %s %s:\n%s\n", id, desc,
 			retval == GL_TRUE ? "warning" : "error", p);
 		free(p);
 		if (retval != GL_TRUE)
@@ -750,8 +783,8 @@ bool ac_renderer_shader_check(GLuint obj, GLenum what, char *desc) {
 	return true;
 }
 
-inline bool ac_renderer_create_program(const char *vss, const char *fss,
-	uint *vs, uint *fs, uint *prog) {
+inline bool ac_renderer_create_program(const char *id, const char *vss,
+	const char *fss, uint *vs, uint *fs, uint *prog) {
 	*vs = glCreateShaderObjectARB(GL_VERTEX_SHADER_ARB);
 	*fs = glCreateShaderObjectARB(GL_FRAGMENT_SHADER_ARB);
 	// shut up compiler...
@@ -760,14 +793,14 @@ inline bool ac_renderer_create_program(const char *vss, const char *fss,
 
 	// compile vertex shader
 	glCompileShaderARB(*vs);
-	if (!ac_renderer_shader_check(*vs, GL_OBJECT_COMPILE_STATUS_ARB,
-		"Vertex shader compilation"))
+	if (!ac_renderer_shader_check(*vs, GL_OBJECT_COMPILE_STATUS_ARB, id,
+		"vertex shader compilation"))
 		return false;
 
 	// compile fragment shader
 	glCompileShaderARB(*fs);
-	if (!ac_renderer_shader_check(*fs, GL_OBJECT_COMPILE_STATUS_ARB,
-		"Fragment shader compilation"))
+	if (!ac_renderer_shader_check(*fs, GL_OBJECT_COMPILE_STATUS_ARB, id,
+		"fragment shader compilation"))
 		return false;
 
 	// link the program together
@@ -775,13 +808,13 @@ inline bool ac_renderer_create_program(const char *vss, const char *fss,
 	glAttachObjectARB(*prog, *vs);
 	glAttachObjectARB(*prog, *fs);
 	glLinkProgramARB(*prog);
-	if (!ac_renderer_shader_check(*prog, GL_OBJECT_LINK_STATUS_ARB,
+	if (!ac_renderer_shader_check(*prog, GL_OBJECT_LINK_STATUS_ARB, id,
 		"GPU program linking"))
 		return false;
 
 	// validate the program
 	glValidateProgramARB(*prog);
-	if (!ac_renderer_shader_check(*prog, GL_OBJECT_VALIDATE_STATUS_ARB,
+	if (!ac_renderer_shader_check(*prog, GL_OBJECT_VALIDATE_STATUS_ARB, id,
 		"GPU program validation"))
 		return false;
 
@@ -792,15 +825,27 @@ bool ac_renderer_create_shaders(void) {
 	int i, frames[1 + FRAME_TRACE];
 
 	// create the compositor GPU program
-	if (!ac_renderer_create_program(COMPOSITOR_VS, COMPOSITOR_FS,
+	if (!ac_renderer_create_program("Compositor", COMPOSITOR_VS, COMPOSITOR_FS,
 		&g_comp_vs, &g_comp_fs, &g_compositor))
 		return false;
 	// create the font GPU program
-	if (!ac_renderer_create_program(COMPOSITOR_VS, FONT_FS,
+	if (!ac_renderer_create_program("Font", COMPOSITOR_VS, FONT_FS,
 		&g_font_vs, &g_font_fs, &g_fontProgram))
 		return false;
+	// create the prop GPU program
+	if (!ac_renderer_create_program("Prop", PROP_VS, PROP_FS,
+		&g_prop_vs, &g_prop_fs, &g_propProgram))
+		return false;
 
-	// set font shader up
+	// set the prop shader up
+	glUseProgramObjectARB(g_propProgram);
+	if ((i = glGetUniformLocationARB(g_propProgram, "propTex")) < 0) {
+		fprintf(stderr, "Failed to find prop texture uniform variable\n");
+		return false;
+	}
+	glUniform1iARB(i, 0);
+
+	// set the font shader up
 	glUseProgramObjectARB(g_fontProgram);
 	if ((i = glGetUniformLocationARB(g_fontProgram, "fontTex")) < 0) {
 		fprintf(stderr, "Failed to find font texture uniform variable\n");
@@ -810,10 +855,11 @@ bool ac_renderer_create_shaders(void) {
 
 	// find uniform locations
 	glUseProgramObjectARB(g_compositor);
-	if ((g_comp_2D = glGetUniformLocationARB(g_compositor, "overlay")) < 0) {
+	if ((i = glGetUniformLocationARB(g_compositor, "overlay")) < 0) {
 		fprintf(stderr, "Failed to find overlay uniform variable\n");
 		return false;
 	}
+	glUniform1iARB(i, 0);
 	if ((g_comp_frames = glGetUniformLocationARB(g_compositor, "frames")) < 0) {
 		fprintf(stderr, "Failed to find frames uniform variable\n");
 		return false;
@@ -822,8 +868,10 @@ bool ac_renderer_create_shaders(void) {
 		fprintf(stderr, "Failed to find negative uniform variable\n");
 		return false;
 	}
-	// texture slots are constant, so set them already
-	glUniform1iARB(g_comp_2D, 0);	// 2D overlay at GL_TEXTURE0
+	if ((g_comp_contrast = glGetUniformLocationARB(g_compositor, "cont")) < 0) {
+		fprintf(stderr, "Failed to find contrast uniform variable\n");
+		return false;
+	}
 	// fill the frames array; frames at GL_TEXTURE1 + i
 	for (i = 0; i < 1 + FRAME_TRACE; i++)
 		frames[i] = i + 1;
@@ -919,7 +967,7 @@ void ac_renderer_draw_string(char *str, float ox, float oy, float scale) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void ac_rederer_draw_lines(const float pts[][2], uint num_pts, float width) {
+void ac_renderer_draw_lines(float pts[][2], uint num_pts, float width) {
 	uint i;
 	glLineWidth(width);
 	glBegin(GL_LINES);
@@ -1065,6 +1113,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 
 	glEnable(GL_TEXTURE_2D);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glColor4f(1, 1, 1, 1);
 
 	// set up fog
 	glFogi(GL_FOG_MODE, GL_EXP2);
@@ -1083,9 +1132,14 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 		return false;
 
 	// generate resources
+	// signal the game from time to time
+	ac_game_loading_tick();
 	ac_renderer_fill_terrain_indices();
+	ac_game_loading_tick();
 	ac_renderer_fill_terrain_vertices();
+	ac_game_loading_tick();
 	ac_renderer_calc_terrain_lodlevels();
+	ac_game_loading_tick();
 	ac_renderer_create_props();
 	ac_renderer_create_fx();
 	ac_renderer_create_font();
@@ -1123,6 +1177,12 @@ void ac_renderer_shutdown(void) {
 	glDeleteObjectARB(g_font_fs);
 	glDeleteObjectARB(g_fontProgram);
 
+	glDetachObjectARB(g_propProgram, g_prop_vs);
+	glDetachObjectARB(g_propProgram, g_prop_fs);
+	glDeleteObjectARB(g_prop_vs);
+	glDeleteObjectARB(g_prop_fs);
+	glDeleteObjectARB(g_propProgram);
+
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }
@@ -1155,8 +1215,6 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 	float cy, cp, sy, sp;
 	ac_vec4_t fwd, right, up;
 
-	g_viewpoint = vp->origin;
-
 	// scroll the FBO every 27 ms
 	if (time - lastTime >= 27) {
 		g_currentFBO = (g_currentFBO + 1) % (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
@@ -1175,6 +1233,12 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_FOG);
 	glEnable(GL_CULL_FACE);
+
+	// don't bother going further if we don't have a valid viewpoint
+	if (!vp)
+		return;
+
+	g_viewpoint = vp->origin;
 
 	// set up the GL projection matrix
 	glMatrixMode(GL_PROJECTION);
@@ -1229,6 +1293,8 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 
 	// draw props
 	ac_renderer_draw_props();
+
+	glDisable(GL_FOG);
 }
 
 void ac_renderer_finish_3D(void) {
@@ -1265,12 +1331,13 @@ void ac_renderer_finish_2D(void) {
 	glOrtho(0, 1, 0, 1, -1, 1);
 }
 
-void ac_renderer_composite(float negative) {
+void ac_renderer_composite(float negative, float contrast) {
 	int i;
 
 	glClear(GL_COLOR_BUFFER_BIT);
 	glUseProgramObjectARB(g_compositor);
 	glUniform1fARB(g_comp_neg, negative);
+	glUniform1fARB(g_comp_contrast, contrast);
 
 	glActiveTextureARB(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, g_2DTex);

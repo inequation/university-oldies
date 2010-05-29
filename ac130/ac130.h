@@ -238,7 +238,7 @@ void ac_renderer_draw_string(char *str, float ox, float oy, float scale);
 ///						coordinates
 /// \param num_pts		number of points in the array
 /// \param width		desired width of the line segments in pixels
-void ac_rederer_draw_lines(const float pts[][2], uint num_pts, float width);
+void ac_renderer_draw_lines(float pts[][2], uint num_pts, float width);
 
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
 /// switches to the 2D (HUD) stage.
@@ -256,7 +256,9 @@ void ac_renderer_finish_2D(void);
 /// outputs the frame to screen.
 /// \param negative		fraction of display negative influence (for smooth
 ///						positive-negative transitions)
-void ac_renderer_composite(float negative);
+/// \param contrast		fraction of contrast enhancement (for more prominent
+///						M102 explosions)
+void ac_renderer_composite(float negative, float contrast);
 
 // =========================================================
 // Game logic interface
@@ -268,6 +270,7 @@ void ac_renderer_composite(float negative);
 #define INPUT_1				0x08
 #define INPUT_2				0x10
 #define INPUT_3				0x20
+#define INPUT_PAUSE			0x40
 
 typedef struct {
 	int			flags;
@@ -286,5 +289,8 @@ void ac_game_shutdown(void);
 /// \param frameTime	time elapsed since last frame in seconds
 /// \param input		current state of player input
 void ac_game_frame(int ticks, float frameTime, ac_input_t *input);
+
+/// Updates the game loading screen. Only to be called before \ref ac_game_init
+void ac_game_loading_tick(void);
 
 #endif // AC130_H

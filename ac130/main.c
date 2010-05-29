@@ -96,6 +96,9 @@ int main (int argc, char *argv[]) {
 						case SDLK_3:
 							curInput.flags |= INPUT_3;
 							break;
+						case SDLK_p:
+							curInput.flags |= INPUT_PAUSE;
+							break;
 #ifndef NDEBUG
 						case SDLK_g:
 							grab = !grab;

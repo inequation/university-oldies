@@ -2,19 +2,29 @@ static const char COMPOSITOR_FS[] = STRINGIFY(
 uniform sampler2D overlay;
 uniform sampler2D frames[6];	// MUST be kept in sync with 1 + FRAME_TRACE!!!
 uniform float negative;
+uniform float cont;
 
 vec4 get_view(vec2 st) {
-	vec4 p = 0.705 * texture2D(frames[5], st)
+	// add past frames together to achieve the inertia effect
+	vec4 v = 0.705 * texture2D(frames[5], st)
 		+ 0.105 * texture2D(frames[4], st)
 		+ 0.085 * texture2D(frames[3], st)
 		+ 0.065 * texture2D(frames[2], st)
 		+ 0.045 * texture2D(frames[1], st)
 		+ 0.025 * texture2D(frames[0], st);
-	vec4 n = vec4(1.0) - p;
-	return (1.0 - negative) * p + negative * n;
+	// enhance the contrast
+	vec3 c = mix(v.rgb * 0.5,
+		vec3(1.0) - 0.5 * (vec3(1.0) - v.rgb),
+		smoothstep(0.5, 0.75, v.r));
+	// mix the normal and contrast-enhanced versions
+	vec3 p = mix(v.rgb, c, cont);
+	// find the negative
+	vec3 n = vec3(1.0) - p.rgb;
+	// mix the positive and negatives
+	return vec4(mix(p, n, negative), 1.0);
 }
 
-const float blurSize = 1.0 / 1024.0;
+const float blurSize = 0.8 / 1024.0;
 vec4 get_overlay(vec2 st) {
 	vec4 sum = vec4(0.0);
 	sum += texture2D(overlay, vec2(st.x - 8.0 * blurSize, st.y)) * 0.022;

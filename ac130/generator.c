@@ -106,7 +106,7 @@ static void ac_gen_cloudmap(char *dst, int size) {
 						(float)(x + xoff) * freq,
 						(float)(y + yoff) * freq,
 						sqrtf((x + xoff) * (y + yoff)) * freq));
-
+			ac_game_loading_tick();
 		}
 	}
 
@@ -125,6 +125,7 @@ static void ac_gen_cloudmap(char *dst, int size) {
 				dst[y * size + x] = (char)pix;
 			}
 		}
+		ac_game_loading_tick();
 	}
 
 	for (x = 0; x < sizeof(submaps) / sizeof(submaps[0]); x++)
@@ -176,6 +177,7 @@ void ac_gen_terrain(int seed) {
 			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] = pix;
 #endif
 		}
+		ac_game_loading_tick();
 	}
 
 	free(cloudmap);
@@ -240,6 +242,8 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 				indices[iofs] = indices[iofs - 2 - base];
 		}*/
 	}
+
+	ac_game_loading_tick();
 
 	// buildings
 
@@ -347,6 +351,8 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 				+ i + PROP_TEXTURE_SIZE / 2 - 5] = 255;
 		}
 	}
+
+	ac_game_loading_tick();
 }
 
 static inline float ac_gen_smoothstep(float t) {
@@ -392,6 +398,7 @@ void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 			} else
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 0;
 		}
+		ac_game_loading_tick();
 	}
 }
 
@@ -432,7 +439,7 @@ static void ac_gen_propmap_populate(int x, int y, int *counter, int *trace,
 		ac_gen_propmap_populate(x + 1, y - 1, counter, trace, value);
 }
 
-void ac_gen_propmap(void) {
+static void ac_gen_propmap(void) {
 	const int numFields = PROPMAP_SIZE * PROPMAP_SIZE;
 	int treeFields = TREE_COVERAGE * numFields;
 	int bldgFields = BLDG_COVERAGE * numFields;
@@ -446,15 +453,19 @@ void ac_gen_propmap(void) {
 								&treeFields, &trace, 1);
 	}
 
+	ac_game_loading_tick();
+
 	while (bldgFields) {
 		trace = 1 + ac_gen_rand() % 4;
 		ac_gen_propmap_populate(ac_gen_rand() % PROPMAP_SIZE,
 								ac_gen_rand() % PROPMAP_SIZE,
 								&bldgFields, &trace, 2);
 	}
+
+	ac_game_loading_tick();
 }
 
-ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
+static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs, int x, int y, int step) {
 	int i;
 	float tx, tz, min, max;
@@ -577,6 +588,8 @@ void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
 	// use the propmap to place the actual objects
 	g_proptree = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 							0, 0, PROPMAP_SIZE / 2);
+
+	ac_game_loading_tick();
 
 	free(g_propmap);
 }

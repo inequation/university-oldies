@@ -88,10 +88,16 @@ bool ac_game_init(void) {
 	g_bldgs = malloc(sizeof(*g_bldgs) * MAX_NUM_TREES);
 	ac_gen_proplists(&g_num_trees, g_trees, &g_num_bldgs, g_bldgs);
 
+	// final tick before game is ready
+	ac_game_loading_tick();
+
 	g_gravity = ac_vec_set(0, -9.81, 0, 0);
 
 	memset(g_projs, 0, sizeof(g_projs));
 	memset(g_particles, 0, sizeof(g_particles));
+
+	g_viewpoint.angles[0] = M_PI * 0.5;
+	g_viewpoint.angles[1] = M_PI * -0.17;
 	return true;
 }
 
@@ -575,25 +581,25 @@ static const float g_reticle_M61[][2] = {
 	{0.67, 0.67},	{0.63, 0.67}
 };
 
-void ac_game_drawHUD(void) {
-	char buf[32];
+void ac_game_drawHUD(float neg) {
+	char buf[64];
 	ac_vec4_t p;
 
 	// static elements of the HUD
 	// different weapons have different reticles
 	switch (g_weapon) {
 		case WP_M61:
-			ac_rederer_draw_lines(g_reticle_M61,
+			ac_renderer_draw_lines((float (*)[2])g_reticle_M61,
 				sizeof(g_reticle_M61) / sizeof(g_reticle_M61[0]), 3.f);
 			ac_renderer_draw_string("25mm", 0, 0.9, 0.6);
 			break;
 		case WP_L60:
-			ac_rederer_draw_lines(g_reticle_L60,
+			ac_renderer_draw_lines((float (*)[2])g_reticle_L60,
 				sizeof(g_reticle_L60) / sizeof(g_reticle_L60[0]), 3.f);
 			ac_renderer_draw_string("40mm", 0, 0.9, 0.6);
 			break;
 		case WP_M102:
-			ac_rederer_draw_lines(g_reticle_M102,
+			ac_renderer_draw_lines((float (*)[2])g_reticle_M102,
 				sizeof(g_reticle_M102) / sizeof(g_reticle_M102[0]), 3.f);
 			ac_renderer_draw_string("105mm", 0, 0.9, 0.6);
 			break;
@@ -613,8 +619,66 @@ void ac_game_drawHUD(void) {
 	p = ac_vec_ma(g_forward, ac_vec_setall(800), g_viewpoint.origin);
 	p = ac_game_collide(g_viewpoint.origin, p);
 	p = ac_vec_sub(p, g_viewpoint.origin);
-	sprintf(buf, "%08d %4.0f", 0, ac_vec_length(p));
+	sprintf(buf, "T\n"
+		"G\n"
+		"T\n"
+		"\n"
+		"Z\n"
+		"Q\n"
+		"\n"
+		"F\n"
+		"S\n"
+		"T\n"
+		"%s N\n"
+		"SCORE %08d  TARG DIST %4.0f",
+		neg > 0.5 ? "BHOT" : "WHOT", 0, ac_vec_length(p));
 	ac_renderer_draw_string(buf, -1, 0, 0.6);
+}
+
+void ac_game_draw_instructions(void) {
+	ac_renderer_draw_string("CONTROLS:\n", 0.02, 0.02, 1.f);
+	ac_renderer_draw_string("Mouse:              Aim\n"
+		"Left mouse button:  Fire\n"
+		"Right mouse button: Toggle weapons\n"
+		"1, 2, 3:            Weapon selection\n"
+		"F:                  Toggle white hot/black\n"
+		"                    hot vision\n"
+		"P:                  Pause game\n"
+		"Esc:                Quit game", 0.02, 0.1, 0.55);
+	ac_renderer_draw_string("OBJECTIVE:\n", 0.02, 0.48, 1.f);
+	ac_renderer_draw_string("Somewhere in the world, war rages. You are\n"
+		"a TV operator aboard an AC-130 gunship.\n"
+		"Your mission is to provide fire support\n"
+		"for friendly troops on the ground. Beware\n"
+		"of friendly fire! *Do not* fire on troops\n"
+		"marked by a flashing IR strobe!", 0.02, 0.56, 0.55);
+}
+
+#define TOTAL_TICKS	6410.f
+void ac_game_loading_tick() {
+	static char buf[32];
+	static float pts[][2] = {
+		{0.25, 0.97}, {0.25, 0.97}
+	};
+	static int counter = 0;
+	counter++;
+	ac_renderer_start_scene(0, NULL);
+	ac_renderer_finish_fx();
+	ac_renderer_finish_3D();
+
+	// draw the instructions
+	ac_game_draw_instructions();
+	// draw the progress bar
+	pts[1][0] = 0.25 + 0.5 * (float)counter / TOTAL_TICKS;
+	ac_renderer_draw_lines(pts, 2, 12.f);
+	// draw percentage
+	sprintf(buf, "LOADING - %.0f%%", (float)counter / TOTAL_TICKS * 100.f);
+	ac_renderer_draw_string(buf, 0.25, 0.87, 1.0);
+	ac_renderer_draw_string("(C) 2010, Leszek Godlewski - www.inequation.org",
+		-0.995, 0.005, 0.3);
+
+	ac_renderer_finish_2D();
+	ac_renderer_composite(0.f, 0.f);
 }
 
 #define FLOATING_RADIUS		200.f
@@ -657,8 +721,8 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		g_viewpoint.angles[0] = -plane_angle + M_PI * 0.2;
 	else if (g_viewpoint.angles[0] > -plane_angle + M_PI * 0.8)
 		g_viewpoint.angles[0] = -plane_angle + M_PI* 0.8;
-	if (g_viewpoint.angles[1] > M_PI * -0.165)
-		g_viewpoint.angles[1] = M_PI * -0.165;
+	if (g_viewpoint.angles[1] > M_PI * -0.17)
+		g_viewpoint.angles[1] = M_PI * -0.17;
 	else if (g_viewpoint.angles[1] < M_PI * -0.45)
 		g_viewpoint.angles[1] = M_PI * -0.45;
 #else
@@ -702,7 +766,7 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	ac_renderer_finish_fx();
 
 	ac_renderer_finish_3D();
-	ac_game_drawHUD();
+	ac_game_drawHUD(neg);
 	ac_renderer_finish_2D();
 
 	// negative time means positive->negative transition
@@ -715,5 +779,5 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		if (neg < 0.f)
 			neg = 0.f;
 	}
-	ac_renderer_composite(neg);
+	ac_renderer_composite(neg, 0.f);
 }
