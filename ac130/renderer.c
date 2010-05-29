@@ -101,9 +101,6 @@ int			g_comp_frames = -1;
 int			g_comp_neg = -1;
 int			g_comp_contrast = -1;
 
-// uncomment to enable GLSL pseudo-instancing
-#define USE_INSTANCING
-
 void ac_renderer_set_frustum(ac_vec4_t pos,
 							ac_vec4_t fwd, ac_vec4_t right, ac_vec4_t up,
 							float x, float y, float zNear, float zFar) {
@@ -521,21 +518,9 @@ void ac_renderer_create_fx(void) {
 }
 
 void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
-#ifndef USE_INSTANCING
-	static GLmatrix_t m = {
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		1, 0, 0, 1
-	};
-#endif // USE_INSTANCING
-
 	if (node->trees != NULL) {
 		int i;
 		float d2;
-#ifndef USE_INSTANCING
-		float c, s;
-#endif
 		ac_tree_t *t;
 		int ofs, num;
 		// pick level of detail
@@ -556,86 +541,21 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 		}
 
 		for (t = node->trees, i = 0; i < TREES_PER_FIELD; i++, t++) {
-#ifndef USE_INSTANCING
-			glPushMatrix();
-
-			c = cosf(t->ang);
-			s = sinf(t->ang);
-			// column 1
-			m[0] = t->XZscale * c;
-			//m[1] = 0;
-			m[2] = t->XZscale * -s;
-			//m[3] = 0;
-			// column 2
-			//m[4] = 0;
-			m[5] = t->Yscale;
-			//m[6] = 0;
-			//m[7] = 0;
-			// column 3
-			m[8] = t->XZscale * s;
-			//m[9] = 0;
-			m[10] = t->XZscale * c;
-			//m[11] = 0;
-			// column 4
-			/*m[12] = t->pos.f[0];
-			m[13] = t->pos.f[1];
-			m[14] = t->pos.f[2];
-			//m[15] = 1;*/
-			ac_vec_tofloat(t->pos, &m[12]);
-			glMultMatrixf(m);
-#else
 			glMultiTexCoord3fv(GL_TEXTURE1, t->pos.f);
 			glMultiTexCoord4f(GL_TEXTURE2, t->XZscale, t->Yscale, t->XZscale,
 				t->ang);
-#endif // USE_INSTANCING
 
 			glDrawElements(GL_TRIANGLE_FAN, num, GL_UNSIGNED_BYTE, (void *)ofs);
 			*g_vertCounter += num - 1;
 			*g_triCounter += num - 2;
-
-#ifndef USE_INSTANCING
-			glPopMatrix();
-#endif // USE_INSTANCING
 		}
 	} else if (node->bldgs != NULL) {
 		int i;
-#ifndef USE_INSTANCING
-		float c, s;
-#endif
 		ac_bldg_t *b;
 		for (b = node->bldgs, i = 0; i < BLDGS_PER_FIELD; i++, b++) {
-#ifndef USE_INSTANCING
-			glPushMatrix();
-
-			c = cosf(b->ang);
-			s = sinf(b->ang);
-			// column 1
-			m[0] = b->Xscale * c;
-			//m[1] = 0;
-			m[2] = b->Zscale * -s;
-			//m[3] = 0;
-			// column 2
-			//m[4] = 0;
-			m[5] = b->Yscale;
-			//m[6] = 0;
-			//m[7] = 0;
-			// column 3
-			m[8] = b->Xscale * s;
-			//m[9] = 0;
-			m[10] = b->Zscale * c;
-			//m[11] = 0;
-			// column 4
-			/*m[12] = t->pos.f[0];
-			m[13] = t->pos.f[1];
-			m[14] = t->pos.f[2];
-			//m[15] = 1;*/
-			ac_vec_tofloat(b->pos, &m[12]);
-			glMultMatrixf(m);
-#else
 			glMultiTexCoord3fv(GL_TEXTURE1, b->pos.f);
 			glMultiTexCoord4f(GL_TEXTURE2, b->Xscale, b->Yscale, b->Zscale,
 				b->ang);
-#endif // USE_INSTANCING
 
 			if (b->slantedRoof) {
 				glDrawElements(GL_TRIANGLE_STRIP, BLDG_SLNT_INDICES,
@@ -649,10 +569,6 @@ void ac_renderer_recurse_proptree_drawall(ac_prop_t *node) {
 				*g_vertCounter += BLDG_SLNT_VERTS;
 				*g_triCounter += BLDG_SLNT_INDICES - 2;
 			}
-
-#ifndef USE_INSTANCING
-			glPopMatrix();
-#endif // USE_INSTANCING
 		}
 	} else if (node->child[0] != NULL) {
 		// it's enough to just check the existence of the 1st child because a
@@ -694,16 +610,12 @@ void ac_renderer_draw_props(void) {
 					(void *)offsetof(ac_vertex_t, pos.f[0]));
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, st[0]));
-#ifdef USE_INSTANCING
 	glUseProgramObjectARB(g_propProgram);
-#endif // USE_INSTANCING
 
 	ac_renderer_recurse_proptree(g_proptree, PROPMAP_SIZE / 2);
 
 	// bring the previous state back
-#ifdef USE_INSTANCING
 	glUseProgramObjectARB(0);
-#endif // USE_INSTANCING
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);

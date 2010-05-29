@@ -58,7 +58,11 @@ ac_tree_t		*g_trees;
 int				g_num_bldgs;
 ac_bldg_t		*g_bldgs;
 
-// some helper vectors for physics
+bool			g_paused = true;
+
+// some helper vectors for physics and other mechanics
+float			g_time;
+float			g_frameTime;
 ac_vec4_t		g_gravity;
 ac_vec4_t		g_frameTimeVec;
 
@@ -73,10 +77,13 @@ ac_viewpoint_t	g_viewpoint = {
 weap_t			g_weapon = WP_M61;
 
 #define SHAKE_TIME			0.45
-float			g_shake_time = 0;
+float			g_shake_time = -SHAKE_TIME;
 
 #define NEGATIVE_TIME		0.25
-float			g_neg_time = 0.000001;
+float			g_neg_time = 0.f;
+
+#define EXPLOSION_TIME		2.0
+float			g_expl_time = -EXPLOSION_TIME;
 
 bool ac_game_init(void) {
 	// set new terrain heightmap
@@ -164,7 +171,7 @@ int ac_game_particle_cmp(const void *p1, const void *p2) {
 }
 
 #define USE_QSORT
-void ac_game_advance_particles(float t) {
+void ac_game_advance_particles(void) {
 	int i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t tmp;
@@ -187,7 +194,7 @@ void ac_game_advance_particles(float t) {
 #else
 			continue;
 #endif
-		p->life -= t;
+		p->life -= g_frameTime;
 		if (p->life < 0.f) {
 			p->weap = WP_NONE;
 			continue;
@@ -198,21 +205,21 @@ void ac_game_advance_particles(float t) {
 		switch (p->weap) {
 			case WP_M61:
 			case WP_M61_TRACER:
-				f = f * f * -0.25 * t;
+				f = f * f * -0.25 * g_frameTime;
 				g = 0.5;
 				// fade the alpha away during the last second
 				if (p->life < 1.f)
 					p->alpha = p->life;
 				break;
 			case WP_L60:
-				f = f * f * -0.8 * t;
+				f = f * f * -0.8 * g_frameTime;
 				g = 0.025;
 				// fade the alpha away during the last 2 seconds
 				if (p->life < 2.f)
 					p->alpha = p->life * 0.5;
 				break;
 			case WP_M102:
-				f = f * f * -0.6 * t;
+				f = f * f * -0.6 * g_frameTime;
 				g = 0.02;
 				// fade the alpha away during the last 4 seconds
 				if (p->life < 4.f)
@@ -296,6 +303,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 			}
 			break;
 		case WP_M102:
+			g_expl_time = g_time;
 			pos = ac_vec_add(pos, ac_vec_set(0, 6, 0, 0));
 			for (i = 0, j = 0, p = g_particles;
 				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 36;
@@ -391,7 +399,7 @@ void ac_game_advance_projectiles(void) {
 	}
 }
 
-void ac_game_fire_weapon(weap_t w, float t) {
+void ac_game_fire_weapon(weap_t w) {
 	int i;
 	static int m61 = 0;
 	//printf("FIRE! %d\n", (int)w);
@@ -413,7 +421,7 @@ void ac_game_fire_weapon(weap_t w, float t) {
 					break;
 				case WP_M102:
 					g_projs[i].vel = ac_vec_mulf(g_forward, WEAP_MUZZVEL_M102);
-					g_shake_time = t;
+					g_shake_time = g_time;
 					break;
 				// shut up compiler
 				case WP_NONE:
@@ -425,77 +433,95 @@ void ac_game_fire_weapon(weap_t w, float t) {
 	}
 }
 
-void ac_game_player_think(ac_input_t *in, float t, float ft) {
+void ac_game_player_think(ac_input_t *in) {
 	// times since last shots
 	static float m61 = WEAP_FIREDELAY_M61;
 	static float l60 = WEAP_FIREDELAY_L60;
 	static float m102 = WEAP_FIREDELAY_M102;
-	static bool rpressed = false, npressed = false;
+	static bool rpressed = false, npressed = false, pausepressed = false;
 
-	m61 += ft;
-	l60 += ft;
-	m102 += ft;
+	if (g_paused) {
+		if (in->flags & INPUT_PAUSE && !pausepressed) {
+			g_paused = false;
+			pausepressed = true;
+		} else if (!(in->flags & INPUT_PAUSE))
+			pausepressed = false;
+	} else {
+		m61 += g_frameTime;
+		l60 += g_frameTime;
+		m102 += g_frameTime;
 
-	// mouse button handling
-	if (in->flags & INPUT_MOUSE_LEFT) {
-		// fire if the gun's cooled down already
-		switch (g_weapon) {
-			case WP_M61:
-				// this gun needs special handling - it fires at 6000 rpm, so
-				// make sure we get all the rounds out even if the FPS stutters
-				while (ft >= WEAP_FIREDELAY_M61) {
-					ac_game_fire_weapon(g_weapon, t);
-					ft -= WEAP_FIREDELAY_M61;
-				}
-				m61 += ft;
-				if (m61 >= WEAP_FIREDELAY_M61) {
-					m61 = 0;
-					ac_game_fire_weapon(g_weapon, t);
-				}
-				break;
-			case WP_L60:
-				if (l60 >= WEAP_FIREDELAY_L60) {
-					l60 = 0;
-					ac_game_fire_weapon(g_weapon, t);
-				}
-				break;
-			case WP_M102:
-				if (m102 >= WEAP_FIREDELAY_M102) {
-					m102 = 0;
-					ac_game_fire_weapon(g_weapon, t);
-				}
-				break;
-			default:
-				break;
-		}
-		rpressed = false;
-	} else if (in->flags & INPUT_MOUSE_RIGHT && !rpressed) {
-		// cycle the weapons
-		rpressed = true;
-		g_weapon++;
-		if (g_weapon > WP_M102)
+		// mouse button handling
+		if (in->flags & INPUT_MOUSE_LEFT) {
+			// fire if the gun's cooled down already
+			switch (g_weapon) {
+				case WP_M61:
+					// this gun needs special handling - it fires at 6000 rpm, so
+					// make sure we get all the rounds out even if the FPS stutters
+					{
+						float ft = g_frameTime;
+						while (ft >= WEAP_FIREDELAY_M61) {
+							ac_game_fire_weapon(g_weapon);
+							ft -= WEAP_FIREDELAY_M61;
+						}
+						m61 += ft;
+						if (m61 >= WEAP_FIREDELAY_M61) {
+							m61 = 0;
+							ac_game_fire_weapon(g_weapon);
+						}
+					}
+					break;
+				case WP_L60:
+					if (l60 >= WEAP_FIREDELAY_L60) {
+						l60 = 0;
+						ac_game_fire_weapon(g_weapon);
+					}
+					break;
+				case WP_M102:
+					if (m102 >= WEAP_FIREDELAY_M102) {
+						m102 = 0;
+						ac_game_fire_weapon(g_weapon);
+					}
+					break;
+				default:
+					break;
+			}
+			rpressed = false;
+		} else if (in->flags & INPUT_MOUSE_RIGHT && !rpressed) {
+			// cycle the weapons
+			rpressed = true;
+			g_weapon++;
+			if (g_weapon > WP_M102)
+				g_weapon = WP_M61;
+		} else if (!(in->flags & INPUT_MOUSE_RIGHT))
+			rpressed = false;
+
+		// whot/bhot switch
+		if (in->flags & INPUT_NEGATIVE && !npressed) {
+			// negative time means positive->negative transition
+			if (g_neg_time >= 0)
+				g_neg_time = -g_time;
+			else
+				g_neg_time = g_time;
+			npressed = true;
+		} else if (!(in->flags & INPUT_NEGATIVE))
+			npressed = false;
+
+		// keyboard weapon switching
+		if (in->flags & INPUT_1)
 			g_weapon = WP_M61;
-	} else if (!(in->flags & INPUT_MOUSE_RIGHT))
-		rpressed = false;
+		else if (in->flags & INPUT_2)
+			g_weapon = WP_L60;
+		else if (in->flags & INPUT_3)
+			g_weapon = WP_M102;
 
-	// whot/bhot switch
-	if (in->flags & INPUT_NEGATIVE) {
-		// negative time means positive->negative transition
-		if (g_neg_time >= 0)
-			g_neg_time = -t;
-		else
-			g_neg_time = t;
-		npressed = true;
-	} else
-		npressed = false;
-
-	// keyboard weapon switching
-	if (in->flags & INPUT_1)
-		g_weapon = WP_M61;
-	else if (in->flags & INPUT_2)
-		g_weapon = WP_L60;
-	else if (in->flags & INPUT_3)
-		g_weapon = WP_M102;
+		// pausing
+		if (in->flags & INPUT_PAUSE && !pausepressed) {
+			g_paused = true;
+			pausepressed = true;
+		} else if (!(in->flags & INPUT_PAUSE))
+			pausepressed = false;
+	}
 }
 
 static const float g_reticle_M102[][2] = {
@@ -684,15 +710,10 @@ void ac_game_loading_tick() {
 #define FLOATING_RADIUS		200.f
 #define TIME_SCALE			-0.04
 #define MOUSE_SCALE			0.001
-void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
-	float time = (float)ticks * 0.001;
-	float plane_angle = time * TIME_SCALE;
+void ac_game_viewpoint_think(ac_input_t *input) {
+	float plane_angle = g_time * TIME_SCALE;
 	float fy, fp;
-	static float neg = 0.f;
 	ac_vec4_t tmp;
-	ac_viewpoint_t vp;
-
-	g_frameTimeVec = ac_vec_setall(frameTime);
 
 	// zoom based on weapon selection
 	switch (g_weapon) {
@@ -713,9 +734,11 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	}
 
 	// handle viewpoint movement
-	g_viewpoint.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE * fy
-		+ frameTime * TIME_SCALE;	// keep the cam in sync with the plane
-	g_viewpoint.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE * fy;
+	if (!g_paused) {
+		g_viewpoint.angles[0] -= ((float)input->deltaX) * MOUSE_SCALE * fy
+			+ g_frameTime * TIME_SCALE;	// keep the cam in sync with the plane
+		g_viewpoint.angles[1] -= ((float)input->deltaY) * MOUSE_SCALE * fy;
+	}
 #if 1
 	if (g_viewpoint.angles[0] < -plane_angle + M_PI * 0.2)
 		g_viewpoint.angles[0] = -plane_angle + M_PI * 0.2;
@@ -745,39 +768,80 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	fp = g_viewpoint.angles[1] - 0.004 + 0.001 * (rand() % 9);
 	g_forward = ac_vec_set(
 		-cosf(fp) * sinf(fy), sinf(fp), -cosf(fp) * cosf(fy), 0);
+}
+
+void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
+	static int gameTicks = 0;
+	static int lastTicks = 0;
+	static float neg = 0.f;
+	float expld;
+	ac_viewpoint_t vp;
+
+	// don't advance the clocks if paused
+	if (!g_paused) {
+		gameTicks += ticks - lastTicks;
+		g_frameTime = frameTime;
+	} else
+		g_frameTime = 0.f;
+	lastTicks = ticks;
+	g_frameTimeVec = ac_vec_setall(g_frameTime);
+	g_time = (float)gameTicks * 0.001;
+
+	// handle effects - inversion and contrast enhancement
+	// negative time means positive->negative transition
+	if (g_neg_time < 0 && g_time + g_neg_time <= NEGATIVE_TIME) {
+		neg = (g_time + g_neg_time) / NEGATIVE_TIME;
+		if (neg > 1.f)
+			neg = 1.f;
+	} else if (g_neg_time > 0 && g_time - g_neg_time <= NEGATIVE_TIME) {
+		neg = 1.f - (g_time - g_neg_time) / NEGATIVE_TIME;
+		if (neg < 0.f)
+			neg = 0.f;
+	}
+	if (g_time - g_expl_time <= EXPLOSION_TIME) {
+		expld = EXPLOSION_TIME
+			* (1.f - (g_time - g_expl_time) / EXPLOSION_TIME);
+		if (expld > 1.f)
+			expld = 1.f;
+	} else
+		expld = 0.f;
+
+	// advance the viewpoint
+	ac_game_viewpoint_think(input);
 
 	// operate the weapons
-	ac_game_player_think(input, time, frameTime);
+	ac_game_player_think(input);
 
-	// generate another viewpoint (for gun shakes etc.)
-	if (time - g_shake_time <= SHAKE_TIME) {
-		float lerp = expf(-4 * (time - g_shake_time) / SHAKE_TIME);
+	// generate another viewpoint for gun shakes
+	if (g_time - g_shake_time <= SHAKE_TIME) {
+		float lerp = expf(-4 * (g_time - g_shake_time) / SHAKE_TIME);
 		memcpy(&vp, &g_viewpoint, sizeof(vp));
-		vp.angles[0] += (-0.0175 + 0.000035 * (rand() % 1001)) * lerp;
-		vp.angles[1] += (-0.0175 + 0.000035 * (rand() % 1001)) * lerp;
-		ac_renderer_start_scene(ticks, &vp);
+		vp.angles[0] += (-0.018 + 0.000036 * (rand() % 1001)) * lerp;
+		vp.angles[1] += (-0.018 + 0.000036 * (rand() % 1001)) * lerp;
+		ac_renderer_start_scene(gameTicks, &vp);
 	} else
-		ac_renderer_start_scene(ticks, &g_viewpoint);
+		ac_renderer_start_scene(gameTicks, &g_viewpoint);
 
 	// advance the non-player elements of the world
 	ac_game_advance_projectiles();
 	ac_renderer_start_fx();
-	ac_game_advance_particles(frameTime);
+	ac_game_advance_particles();
 	ac_renderer_finish_fx();
 
 	ac_renderer_finish_3D();
-	ac_game_drawHUD(neg);
+	if (!g_paused)
+		ac_game_drawHUD(neg);
+	else {
+		ac_game_draw_instructions();
+		if (gameTicks == 0) {
+			ac_renderer_draw_string("PRESS FIRE TO START", 0.125, 0.87,
+				1.0);
+			if (input->flags & INPUT_MOUSE_LEFT)
+				g_paused = false;
+		} else
+			ac_renderer_draw_string("GAME PAUSED", 0.27, 0.87, 1.0);
+	}
 	ac_renderer_finish_2D();
 
-	// negative time means positive->negative transition
-	if (g_neg_time < 0 && time + g_neg_time <= NEGATIVE_TIME) {
-		neg = (time + g_neg_time) / NEGATIVE_TIME;
-		if (neg > 1.f)
-			neg = 1.f;
-	} else if (g_neg_time > 0 && time - g_neg_time <= NEGATIVE_TIME) {
-		neg = 1.f - (time - g_neg_time) / NEGATIVE_TIME;
-		if (neg < 0.f)
-			neg = 0.f;
-	}
-	ac_renderer_composite(neg, 0.f);
+	ac_renderer_composite(neg, expld);
 }

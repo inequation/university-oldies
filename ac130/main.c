@@ -36,6 +36,16 @@ int main (int argc, char *argv[]) {
 	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
 					"AC-130");
 
+	// hide mouse cursor and grab input
+	SDL_ShowCursor(0);
+#ifdef NDEBUG
+	SDL_WM_GrabInput(SDL_GRAB_ON);
+	bool grab = true;
+#else
+	SDL_WM_GrabInput(SDL_GRAB_OFF);
+	bool grab = false;
+#endif // NDEBUG
+
 	// make sure SDL cleans up before exit
 	atexit(SDL_Quit);
 
@@ -48,10 +58,6 @@ int main (int argc, char *argv[]) {
 
 	// update window caption to say that we're done generating stuff
 	SDL_WM_SetCaption("AC-130", "AC-130");
-	// hide mouse cursor and grab input
-	SDL_ShowCursor(0);
-	SDL_WM_GrabInput(SDL_GRAB_ON);
-	bool grab = true;
 
 	memset(&prevInput, 0, sizeof(prevInput));
 

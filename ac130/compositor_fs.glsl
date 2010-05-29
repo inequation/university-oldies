@@ -13,8 +13,8 @@ vec4 get_view(vec2 st) {
 		+ 0.045 * texture2D(frames[1], st)
 		+ 0.025 * texture2D(frames[0], st);
 	// enhance the contrast
-	vec3 c = mix(v.rgb * 0.5,
-		vec3(1.0) - 0.5 * (vec3(1.0) - v.rgb),
+	vec3 c = mix(v.rgb * 0.4,
+		vec3(1.0) - 0.4 * (vec3(1.0) - v.rgb),
 		smoothstep(0.5, 0.75, v.r));
 	// mix the normal and contrast-enhanced versions
 	vec3 p = mix(v.rgb, c, cont);
