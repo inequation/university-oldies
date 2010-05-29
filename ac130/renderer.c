@@ -12,7 +12,12 @@
 #include <SDL/SDL_opengl.h>
 #include <GL/glu.h>
 
+// some embedded resources
 #define STRINGIFY(A)  #A
+#include "prop_vs.glsl"
+#include "prop_fs.glsl"
+#include "font_fs.glsl"
+#include "font.h"
 #include "compositor_vs.glsl"
 #include "compositor_fs.glsl"
 
@@ -42,9 +47,10 @@ ac_vertex_t	g_prop_verts[TREE_BASE + 1			// LOD 0
 							+ TREE_BASE - 4		// LOD 2
 							+ BLDG_FLAT_VERTS
 							+ BLDG_SLNT_VERTS];
-uchar		g_prop_indices[TREE_BASE + 2		// LOD 0
+uchar		g_prop_indices[(TREE_BASE + 2		// LOD 0
 							+ TREE_BASE			// LOD 1
-							+ TREE_BASE - 2		// LOD 2
+							+ TREE_BASE - 2)	// LOD 2
+								//* TREES_PER_FIELD
 							+ BLDG_FLAT_INDICES
 							+ BLDG_SLNT_INDICES];
 uchar		g_prop_texture[PROP_TEXTURE_SIZE * PROP_TEXTURE_SIZE];
@@ -78,6 +84,15 @@ uint		g_frameTex[1 + FRAME_TRACE];	///< 0 - current frame, > 0 -
 											///< previous ones
 uint		g_currentFBO = 1;
 #define FBO_2D		0
+
+uint		g_propProgram = 0;
+uint		g_prop_vs = 0;
+uint		g_prop_fs = 0;
+
+uint		g_fontTex;
+uint		g_fontProgram = 0;
+uint		g_font_vs = 0;
+uint		g_font_fs = 0;
 
 uint		g_compositor = 0;
 uint		g_comp_vs = 0;
@@ -778,9 +793,20 @@ bool ac_renderer_create_shaders(void) {
 
 	// create the compositor GPU program
 	if (!ac_renderer_create_program(COMPOSITOR_VS, COMPOSITOR_FS,
-		&g_comp_vs, &g_comp_fs, &g_compositor)) {
+		&g_comp_vs, &g_comp_fs, &g_compositor))
+		return false;
+	// create the font GPU program
+	if (!ac_renderer_create_program(COMPOSITOR_VS, FONT_FS,
+		&g_font_vs, &g_font_fs, &g_fontProgram))
+		return false;
+
+	// set font shader up
+	glUseProgramObjectARB(g_fontProgram);
+	if ((i = glGetUniformLocationARB(g_fontProgram, "fontTex")) < 0) {
+		fprintf(stderr, "Failed to find font texture uniform variable\n");
 		return false;
 	}
+	glUniform1iARB(i, 0);
 
 	// find uniform locations
 	glUseProgramObjectARB(g_compositor);
@@ -806,6 +832,100 @@ bool ac_renderer_create_shaders(void) {
 	glUseProgramObjectARB(0);
 
 	return true;
+}
+
+void ac_renderer_create_font(void) {
+	// generate texture
+	glGenTextures(1, &g_fontTex);
+	glBindTexture(GL_TEXTURE_2D, g_fontTex);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
+				FONT_WIDTH, FONT_HEIGHT, 0,
+				GL_LUMINANCE, GL_UNSIGNED_BYTE, FONT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+#define GLYPH_W	(float)FONT_WIDTH / 13.f
+#define GLYPH_H	(float)FONT_WIDTH / 13.f * (128.f / 75.f)
+void ac_renderer_draw_string(char *str, float ox, float oy, float scale) {
+	static const float glyph_tw = GLYPH_W / (float)FONT_WIDTH;
+	static const float glyph_th = GLYPH_H / (float)FONT_HEIGHT;
+	float glyph_sw = GLYPH_W / (float)SCREEN_WIDTH * scale;
+	float glyph_sh = GLYPH_H / (float)SCREEN_HEIGHT * scale;
+
+	int c;
+	float x = ox, y = oy, s, t, dx = glyph_sw, dy = glyph_sh;
+	bool revord = false;
+
+	// handle align inversions
+	if (ox < 0.f) {
+		dx = -glyph_sw;
+		x = ox = -ox + dx;
+		revord = true;
+	}
+	if (oy < 0.f) {
+		dy = -glyph_sh;
+		y = oy = -oy + dy;
+		revord = true;
+	}
+
+	glBindTexture(GL_TEXTURE_2D, g_fontTex);
+	glUseProgramObjectARB(g_fontProgram);
+	glBegin(GL_QUADS);
+
+#define LOOP_BODY(ptr)								\
+	{												\
+		if (*ptr == '\n') {							\
+			y += dy;								\
+			x = ox;									\
+			continue;								\
+		}											\
+		c = *ptr - ' ';								\
+		if (c <= 0 || c > 90) {						\
+			x += dx;								\
+			continue;								\
+		}											\
+		s = (float)(c % 13) * glyph_tw;				\
+		t = (float)(c / 13) * glyph_th;				\
+		glTexCoord2f(s, t);							\
+		glVertex2f(x, y);							\
+		glTexCoord2f(s + glyph_tw, t);				\
+		glVertex2f(x + glyph_sw, y);				\
+		glTexCoord2f(s + glyph_tw, t + glyph_th);	\
+		glVertex2f(x + glyph_sw, y + glyph_sh);		\
+		glTexCoord2f(s, t + glyph_th);				\
+		glVertex2f(x, y + glyph_sh);				\
+		x += dx;									\
+	}
+
+	if (revord) {
+		char *p;
+		for (p = strchr(str, 0); p >= str; p--)
+			LOOP_BODY(p)
+	} else {
+		for (; *str; str++)
+			LOOP_BODY(str)
+	}
+
+#undef LOOP_BODY
+
+	glEnd();
+	glUseProgramObjectARB(0);
+	glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ac_rederer_draw_lines(const float pts[][2], uint num_pts, float width) {
+	uint i;
+	glLineWidth(width);
+	glBegin(GL_LINES);
+	for (i = 0; i < num_pts; i++)
+		glVertex2fv(pts[i]);
+	glEnd();
 }
 
 bool ac_renderer_init_FBO(void) {
@@ -940,11 +1060,8 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	// set face culling
-#ifdef NDEBUG
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CW);
-	glEnable(GL_CULL_FACE);
-#endif
 
 	glEnable(GL_TEXTURE_2D);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -971,6 +1088,7 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	ac_renderer_calc_terrain_lodlevels();
 	ac_renderer_create_props();
 	ac_renderer_create_fx();
+	ac_renderer_create_font();
 
 	return true;
 }
@@ -991,12 +1109,19 @@ void ac_renderer_shutdown(void) {
 	glDeleteTextures(1, &g_hmapTex);
 	glDeleteTextures(1, &g_propTex);
 	glDeleteTextures(1, &g_fxTex);
+	glDeleteTextures(1, &g_fontTex);
 
 	glDetachObjectARB(g_compositor, g_comp_vs);
 	glDetachObjectARB(g_compositor, g_comp_fs);
 	glDeleteObjectARB(g_comp_vs);
 	glDeleteObjectARB(g_comp_fs);
 	glDeleteObjectARB(g_compositor);
+
+	glDetachObjectARB(g_fontProgram, g_font_vs);
+	glDetachObjectARB(g_fontProgram, g_font_fs);
+	glDeleteObjectARB(g_font_vs);
+	glDeleteObjectARB(g_font_fs);
+	glDeleteObjectARB(g_fontProgram);
 
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
@@ -1049,6 +1174,7 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 	// flick some switches for the 3D rendering
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_FOG);
+	glEnable(GL_CULL_FACE);
 
 	// set up the GL projection matrix
 	glMatrixMode(GL_PROJECTION);
@@ -1111,50 +1237,32 @@ void ac_renderer_finish_3D(void) {
 
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	// depth testing is useless, or even harmful in 2D drawing
+	// depth testing and backface culling are useless, or even harmful in 2D
+	// drawing
 	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+
+	glEnable(GL_BLEND);
 
 	// switch to 2D rendering
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
-	glOrtho(0, 1, 0, 1, -1, 1);
+	glOrtho(0, 1, 1, 0, -1, 1);
 
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
-
-	// temporary crosshairs
-	glColor4f(1, 1, 1, 1);
-	glLineWidth(3.f);
-	glBegin(GL_LINES);
-	glVertex2f(0.4, 0.5);
-	glVertex2f(0.47, 0.5);
-
-	glVertex2f(0.53, 0.5);
-	glVertex2f(0.6, 0.5);
-
-	glVertex2f(0.5, 0.4);
-	glVertex2f(0.5, 0.47);
-
-	glVertex2f(0.5, 0.53);
-	glVertex2f(0.5, 0.6);
-
-	glVertex2f(0.47, 0.47);
-	glVertex2f(0.53, 0.47);
-
-	glVertex2f(0.47, 0.53);
-	glVertex2f(0.53, 0.53);
-
-	glVertex2f(0.47, 0.47);
-	glVertex2f(0.47, 0.53);
-
-	glVertex2f(0.53, 0.47);
-	glVertex2f(0.53, 0.53);
-	glEnd();
 }
 
 void ac_renderer_finish_2D(void) {
+	glDisable(GL_BLEND);
+
 	// switch back to system-provided FBO
 	glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, 0);
+
+	// prepare projection matrix for compositing
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(0, 1, 0, 1, -1, 1);
 }
 
 void ac_renderer_composite(float negative) {

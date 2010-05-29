@@ -1,4 +1,4 @@
-const char *COMPOSITOR_FS = STRINGIFY(
+static const char COMPOSITOR_FS[] = STRINGIFY(
 uniform sampler2D overlay;
 uniform sampler2D frames[6];	// MUST be kept in sync with 1 + FRAME_TRACE!!!
 uniform float negative;
@@ -32,6 +32,6 @@ vec4 get_overlay(vec2 st) {
 void main() {
 	vec4 ov = get_overlay(gl_TexCoord[0].st);
 	vec4 view = get_view(gl_TexCoord[0].st);
-	gl_FragColor = vec4(ov.rgb * ov.a + view.rgb * (1.0 - ov.a), 1.0);
+	gl_FragColor = vec4(mix(view.rgb, ov.rgb, ov.a), 1.0);
 }
 );

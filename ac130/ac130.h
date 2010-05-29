@@ -218,6 +218,28 @@ void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 /// \param scale		scale of the tracer (length in metres, width in pixels)
 void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 
+/// Draws a string at the given normalized coordinates (in the [0..1] range) in
+/// the given scale. The text will be top-left-aligned. Newlines ('\n'
+/// characters) will be respected, but only the printable ASCII characters in
+/// the 32-91 code range will be drawn (others will be replaced by spaces).
+/// \note				Negative coordinates will invert the alignment on the
+///						corresponding axis; e.g. passing (-1, -1) will cause the
+///						text to be drawn from the bottom-right corner, growing
+///						to the top and left
+/// \param str			pointer to a null-terminated string
+/// \param ox			X coordinate of the text origin
+/// \param oy			Y coordinate of the text origin
+/// \param scale		scale of the text
+void ac_renderer_draw_string(char *str, float ox, float oy, float scale);
+
+/// Draws a set of line segments. Coordinates must be normalized (in the [0..1]
+/// range).
+/// \param pts			array of 2-element float arrays that contain the point
+///						coordinates
+/// \param num_pts		number of points in the array
+/// \param width		desired width of the line segments in pixels
+void ac_rederer_draw_lines(const float pts[][2], uint num_pts, float width);
+
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
 /// switches to the 2D (HUD) stage.
 /// \note				Must be called *after* \ref ac_renderer_start_scene and
@@ -243,6 +265,9 @@ void ac_renderer_composite(float negative);
 #define INPUT_NEGATIVE		0x01
 #define INPUT_MOUSE_LEFT	0x02
 #define INPUT_MOUSE_RIGHT	0x04
+#define INPUT_1				0x08
+#define INPUT_2				0x10
+#define INPUT_3				0x20
 
 typedef struct {
 	int			flags;

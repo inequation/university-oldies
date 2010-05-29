@@ -3,5 +3,6 @@
 	<Workspace title="AC-130">
 		<Project filename="ac130.cbp" active="1" />
 		<Project filename="terview.cbp" />
+		<Project filename="fontmake.cbp" />
 	</Workspace>
 </CodeBlocks_workspace_file>

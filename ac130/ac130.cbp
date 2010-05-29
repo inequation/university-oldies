@@ -109,6 +109,8 @@
 			<Option target="Unix Release" />
 			<Option target="Win32 Debug" />
 		</Unit>
+		<Unit filename="font.h" />
+		<Unit filename="font_fs.glsl" />
 		<Unit filename="game.c">
 			<Option compilerVar="CC" />
 		</Unit>

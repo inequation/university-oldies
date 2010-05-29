@@ -80,21 +80,36 @@ int main (int argc, char *argv[]) {
 					done = true;
 					break;
 				case SDL_KEYDOWN:
-					if (event.key.keysym.sym == SDLK_ESCAPE)
-						done = true;
-					else if (event.key.keysym.sym == 'F'
-								|| event.key.keysym.sym == 'f')
-						curInput.flags |= INPUT_NEGATIVE;
-					else if (event.key.keysym.sym == 'G'
-								|| event.key.keysym.sym == 'g') {
-						grab = !grab;
-						if (grab) {
-							SDL_WM_GrabInput(SDL_GRAB_ON);
-							SDL_ShowCursor(0);
-						} else {
-							SDL_WM_GrabInput(SDL_GRAB_OFF);
-							SDL_ShowCursor(1);
-						}
+					switch (event.key.keysym.sym) {
+						case SDLK_ESCAPE:
+							done = true;
+							break;
+						case SDLK_f:
+							curInput.flags |= INPUT_NEGATIVE;
+							break;
+						case SDLK_1:
+							curInput.flags |= INPUT_1;
+							break;
+						case SDLK_2:
+							curInput.flags |= INPUT_2;
+							break;
+						case SDLK_3:
+							curInput.flags |= INPUT_3;
+							break;
+#ifndef NDEBUG
+						case SDLK_g:
+							grab = !grab;
+							if (grab) {
+								SDL_WM_GrabInput(SDL_GRAB_ON);
+								SDL_ShowCursor(0);
+							} else {
+								SDL_WM_GrabInput(SDL_GRAB_OFF);
+								SDL_ShowCursor(1);
+							}
+							break;
+#endif // NDEBUG
+						default:	// shut up compiler
+							break;
 					}
 					break;
 				case SDL_MOUSEBUTTONDOWN:

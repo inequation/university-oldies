@@ -192,21 +192,21 @@ void ac_game_advance_particles(float t) {
 		switch (p->weap) {
 			case WP_M61:
 			case WP_M61_TRACER:
-				f *= f * -0.25;
+				f = f * f * -0.25 * t;
 				g = 0.5;
 				// fade the alpha away during the last second
 				if (p->life < 1.f)
 					p->alpha = p->life;
 				break;
 			case WP_L60:
-				f *= f * -0.8;
+				f = f * f * -0.8 * t;
 				g = 0.025;
 				// fade the alpha away during the last 2 seconds
 				if (p->life < 2.f)
 					p->alpha = p->life * 0.5;
 				break;
 			case WP_M102:
-				f *= f * -0.6;
+				f = f * f * -0.6 * t;
 				g = 0.02;
 				// fade the alpha away during the last 4 seconds
 				if (p->life < 4.f)
@@ -217,7 +217,6 @@ void ac_game_advance_particles(float t) {
 		}
 		// slow the smoke down
 		tmp = ac_vec_mulf(tmp, f);
-		tmp = ac_vec_mul(tmp, g_frameTimeVec);
 		p->vel = ac_vec_add(p->vel, tmp);
 		// add reduced gravity
 		tmp = ac_vec_mulf(grav, g);
@@ -246,7 +245,11 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->scale = 0.4;
 				p->life = 1.5 + 0.001 * (rand() % 101);
 				p->angle = 0.01 * (rand() % 628);
-				dir = ac_vec_set(-20 + rand() % 41, 100, -20 + rand() % 41, 0);
+				dir = ac_vec_set(
+					-2000 + (rand() % 4001),
+					10000,
+					-2000 + (rand() % 4001),
+					0);
 				dir = ac_vec_normalize(dir);
 				p->vel = ac_vec_mulf(dir, 10.f);
 				j++;
@@ -267,22 +270,22 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->angle = 0.01 * (rand() % 628);
 				if (j < 12)
 					dir = ac_vec_set(
-						-30000 + rand() % 60001,
+						-30000 + (rand() % 60001),
 						90000,
-						-30000 + rand() % 60001,
+						-30000 + (rand() % 60001),
 						0);
 				else
 					dir = ac_vec_set(
-						-50000 + rand() % 100001,
+						-50000 + (rand() % 100001),
 						rand() % 4000,
-						-50000 + rand() % 100001,
+						-50000 + (rand() % 100001),
 						0);
 				dir = ac_vec_normalize(dir);
+				p->vel = ac_vec_mulf(dir, 10 + (rand() % 16));
 				if (j % 6 == 0)
-					dir = ac_vec_mulf(dir, 0.2);
+					p->vel = ac_vec_mulf(p->vel, 0.2);
 				else if (j % 6 == 1)
-					dir = ac_vec_mulf(dir, 0.4);
-				p->vel = ac_vec_mulf(dir, 10 + rand() % 16);
+					p->vel = ac_vec_mulf(p->vel, 0.4);
 				j++;
 			}
 			break;
@@ -301,20 +304,20 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				p->angle = 0.01 * (rand() % 628);
 				if (j < 18)
 					dir = ac_vec_set(
-						-30000 + rand() % 60001,
+						-30000 + (rand() % 60001),
 						90000,
-						-30000 + rand() % 60001,
+						-30000 + (rand() % 60001),
 						0);
 				else
 					dir = ac_vec_set(
-						-50000 + rand() % 100001,
+						-50000 + (rand() % 100001),
 						rand() % 40000,
-						-50000 + rand() % 100001,
+						-50000 + (rand() % 100001),
 						0);
 				dir = ac_vec_normalize(dir);
+				p->vel = ac_vec_mulf(dir, 130 + (rand() % 21));
 				if (j % 3 == 0)
-					dir = ac_vec_mulf(dir, 0.35);
-				p->vel = ac_vec_mulf(dir, 130 + rand() % 21);
+					p->vel = ac_vec_mulf(p->vel, 0.35);
 				j++;
 			}
 			break;
@@ -427,6 +430,7 @@ void ac_game_player_think(ac_input_t *in, float t, float ft) {
 	l60 += ft;
 	m102 += ft;
 
+	// mouse button handling
 	if (in->flags & INPUT_MOUSE_LEFT) {
 		// fire if the gun's cooled down already
 		switch (g_weapon) {
@@ -467,6 +471,8 @@ void ac_game_player_think(ac_input_t *in, float t, float ft) {
 			g_weapon = WP_M61;
 	} else if (!(in->flags & INPUT_MOUSE_RIGHT))
 		rpressed = false;
+
+	// whot/bhot switch
 	if (in->flags & INPUT_NEGATIVE) {
 		// negative time means positive->negative transition
 		if (g_neg_time >= 0)
@@ -476,6 +482,139 @@ void ac_game_player_think(ac_input_t *in, float t, float ft) {
 		npressed = true;
 	} else
 		npressed = false;
+
+	// keyboard weapon switching
+	if (in->flags & INPUT_1)
+		g_weapon = WP_M61;
+	else if (in->flags & INPUT_2)
+		g_weapon = WP_L60;
+	else if (in->flags & INPUT_3)
+		g_weapon = WP_M102;
+}
+
+static const float g_reticle_M102[][2] = {
+	// horizontal cross
+	{0.4, 0.5},		{0.47, 0.5},
+	{0.53, 0.5},	{0.6, 0.5},
+
+	// vertical cross
+	{0.5, 0.4},		{0.5, 0.47},
+	{0.5, 0.53},	{0.5, 0.6},
+
+	// the box
+	{0.47, 0.47},	{0.53, 0.47},
+	{0.47, 0.53},	{0.53, 0.53},
+	{0.47, 0.47},	{0.47, 0.53},
+	{0.53, 0.47},	{0.53, 0.53},
+
+	// top left corner
+	{0.25, 0.25},	{0.25, 0.29},
+	{0.25, 0.25},	{0.285, 0.25},
+
+	// top right corner
+	{0.75, 0.25},	{0.75, 0.29},
+	{0.75, 0.25},	{0.715, 0.25},
+
+	// bottom left corner
+	{0.25, 0.75},	{0.25, 0.71},
+	{0.25, 0.75},	{0.285, 0.75},
+
+	// bottom right corner
+	{0.75, 0.75},	{0.75, 0.71},
+	{0.75, 0.75},	{0.715, 0.75}
+};
+
+static const float g_reticle_L60[][2] = {
+	// horizontal cross
+	{0.25, 0.5},	{0.475, 0.5},
+	{0.525, 0.5},	{0.75, 0.5},
+
+	// vertical cross
+	{0.5, 0.25},	{0.5, 0.47},
+	{0.5, 0.53},	{0.5, 0.75},
+
+	// horizontal distance bars
+	{0.25, 0.485},	{0.25, 0.515},
+	{0.325, 0.49},	{0.325, 0.51},
+	{0.4, 0.49},	{0.4, 0.51},
+	{0.6, 0.49},	{0.6, 0.51},
+	{0.675, 0.49},	{0.675, 0.51},
+	{0.75, 0.485},	{0.75, 0.515},
+
+	// vertical distance bars
+	{0.485, 0.25},	{0.515, 0.25},
+	{0.49, 0.325},	{0.51, 0.325},
+	{0.49, 0.4},	{0.51, 0.4},
+	{0.49, 0.6},	{0.51, 0.6},
+	{0.49, 0.675},	{0.51, 0.675},
+	{0.485, 0.75},	{0.515, 0.75}
+};
+
+static const float g_reticle_M61[][2] = {
+	// horizontal cross
+	{0.38, 0.5},	{0.49, 0.5},
+	{0.51, 0.5},	{0.62, 0.5},
+
+	// vertical cross
+	{0.5, 0.51},	{0.5, 0.62},
+
+	// top left corner
+	{0.33, 0.33},	{0.33, 0.37},
+	{0.33, 0.33},	{0.37, 0.33},
+
+	// top right corner
+	{0.67, 0.33},	{0.67, 0.37},
+	{0.67, 0.33},	{0.63, 0.33},
+
+	// bottom left corner
+	{0.33, 0.67},	{0.33, 0.63},
+	{0.33, 0.67},	{0.37, 0.67},
+
+	// bottom right corner
+	{0.67, 0.67},	{0.67, 0.63},
+	{0.67, 0.67},	{0.63, 0.67}
+};
+
+void ac_game_drawHUD(void) {
+	char buf[32];
+	ac_vec4_t p;
+
+	// static elements of the HUD
+	// different weapons have different reticles
+	switch (g_weapon) {
+		case WP_M61:
+			ac_rederer_draw_lines(g_reticle_M61,
+				sizeof(g_reticle_M61) / sizeof(g_reticle_M61[0]), 3.f);
+			ac_renderer_draw_string("25mm", 0, 0.9, 0.6);
+			break;
+		case WP_L60:
+			ac_rederer_draw_lines(g_reticle_L60,
+				sizeof(g_reticle_L60) / sizeof(g_reticle_L60[0]), 3.f);
+			ac_renderer_draw_string("40mm", 0, 0.9, 0.6);
+			break;
+		case WP_M102:
+			ac_rederer_draw_lines(g_reticle_M102,
+				sizeof(g_reticle_M102) / sizeof(g_reticle_M102[0]), 3.f);
+			ac_renderer_draw_string("105mm", 0, 0.9, 0.6);
+			break;
+		default:	// shut up compiler
+			break;
+	}
+	ac_renderer_draw_string("\n"
+		"0    A-G   MAN NARO\n"
+		"RAY\n"
+		"FF 30\n"
+		"LIR\n"
+		"\n"
+		"BORE", 0, 0, 0.6);
+
+	// dynamic elements
+	// find the distance to the point we're looking at
+	p = ac_vec_ma(g_forward, ac_vec_setall(800), g_viewpoint.origin);
+	p = ac_game_collide(g_viewpoint.origin, p);
+	p = ac_vec_sub(p, g_viewpoint.origin);
+	sprintf(buf, "%08d %4.0f", 0, ac_vec_length(p));
+	ac_renderer_draw_string(buf, -1, 0, 0.6);
 }
 
 #define FLOATING_RADIUS		200.f
@@ -563,7 +702,9 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 	ac_renderer_finish_fx();
 
 	ac_renderer_finish_3D();
+	ac_game_drawHUD();
 	ac_renderer_finish_2D();
+
 	// negative time means positive->negative transition
 	if (g_neg_time < 0 && time + g_neg_time <= NEGATIVE_TIME) {
 		neg = (time + g_neg_time) / NEGATIVE_TIME;

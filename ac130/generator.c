@@ -36,7 +36,7 @@ static int p[] = { 151,160,137,91,90,15,
 
 #define fade(t)			((t) * (t) * (t) * ((t) * ((t) * 6 - 15) + 10))
 #define lerp(t, a, b)	((a) + (t) * ((b) - (a)))
-static float grad(int hash, float x, float y, float z) {
+static inline float grad(int hash, float x, float y, float z) {
 	int h = hash & 15;	// convert low 4 bits of hash code into 12 gradient
 	float u = h < 8 ? x : y;	// directions
 	float v = h < 4 ? y : (h == 12 || h==14 ? x : z);
@@ -44,7 +44,7 @@ static float grad(int hash, float x, float y, float z) {
 }
 
 /// Improved perlin noise generator.
-float ac_gen_perlin(float x, float y, float z) {
+static float ac_gen_perlin(float x, float y, float z) {
 	int X, Y, Z;
 	int A, AA, AB, B, BA, BB;
 	float u, v, w;
@@ -181,7 +181,7 @@ void ac_gen_terrain(int seed) {
 	free(cloudmap);
 }
 
-float ac_gen_sample_height(float x, float y) {
+static float ac_gen_sample_height(float x, float y) {
 #if 1
 	// bilinear filtering
 	float xi, yi, xfrac, yfrac;
@@ -230,7 +230,15 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 			verts[vofs].st[1] = 0;
 			indices[iofs++] = vofs++;
 		}
-		indices[iofs++] = vofs - base;	// firts base vertex - full circle
+		indices[iofs++] = vofs - base;	// first base vertex - full circle
+		// now copy the tree TREES_PER_FIELD - 1 times
+		/*for (i = 0; l < TREES_PER_FIELD - 1; l++) {
+			// make a degenerate triangle
+			indices[iofs] = indices[iofs - 1];
+			indices[++iofs] = 0;
+			for (++iofs, j = 0; j < base; j++, iofs++)
+				indices[iofs] = indices[iofs - 2 - base];
+		}*/
 	}
 
 	// buildings
@@ -341,7 +349,7 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	}
 }
 
-inline float ac_gen_smoothstep(float t) {
+static inline float ac_gen_smoothstep(float t) {
 	return t * t * (3 - 2 * t);
 }
 
@@ -374,10 +382,10 @@ void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 			d = sqrtf(x * x + y * y);
 			perlin = ac_gen_perlin(x * invr * 4, y * invr * 4, z * invr * 4);
 			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 0] = 225 + perlin * 30;
-			if (d <= r - 40.f)
+			if (d <= r - 80.f)
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 255;
 			else if (d <= r) {
-				f = (r - d) / 40.f;
+				f = (r - d) / 80.f;
 				perlin = (perlin + 1.f) * 0.5;
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] =
 					ac_gen_smoothstep(f) * 255 * (f + perlin * (1 - f));
