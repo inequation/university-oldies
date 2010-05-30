@@ -269,7 +269,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 			}
 			break;
 		case WP_L60:
-			pos = ac_vec_add(pos, ac_vec_set(0, 4, 0, 0));
+			pos = ac_vec_add(pos, ac_vec_set(0, 2, 0, 0));
 			for (i = 0, j = 0, p = g_particles;
 				i < sizeof(g_particles) / sizeof(g_particles[0]) && j < 24;
 				i++, p++) {
@@ -609,7 +609,7 @@ static const float g_reticle_M61[][2] = {
 
 void ac_game_drawHUD(float neg) {
 	char buf[64];
-	ac_vec4_t p;
+	ac_vec4_t p1, p2;
 
 	// static elements of the HUD
 	// different weapons have different reticles
@@ -642,9 +642,11 @@ void ac_game_drawHUD(float neg) {
 
 	// dynamic elements
 	// find the distance to the point we're looking at
-	p = ac_vec_ma(g_forward, ac_vec_setall(800), g_viewpoint.origin);
-	p = ac_game_collide(g_viewpoint.origin, p);
-	p = ac_vec_sub(p, g_viewpoint.origin);
+	p1 = ac_vec_add(g_viewpoint.origin,
+		ac_vec_set(HEIGHTMAP_SIZE / 2, 0, HEIGHTMAP_SIZE / 2, 0));
+	p2 = ac_vec_ma(g_forward, ac_vec_setall(800), p1);
+	p2 = ac_game_collide(p1, p2);
+	p1 = ac_vec_sub(p2, p1);
 	sprintf(buf, "T\n"
 		"G\n"
 		"T\n"
@@ -656,8 +658,8 @@ void ac_game_drawHUD(float neg) {
 		"S\n"
 		"T\n"
 		"%s N\n"
-		"SCORE %08d  TARG DIST %4.0f",
-		neg > 0.5 ? "BHOT" : "WHOT", 0, ac_vec_length(p));
+		"SCORE %08d TARG DIST %-4.0f",
+		neg > 0.5 ? "BHOT" : "WHOT", 0, ac_vec_length(p1));
 	ac_renderer_draw_string(buf, -1, 0, 0.6);
 }
 
@@ -688,6 +690,9 @@ void ac_game_loading_tick() {
 	};
 	static int counter = 0;
 	counter++;
+	// don't need update the screen every damn tick
+	if (counter % 100 != 1)
+		return;
 	ac_renderer_start_scene(0, NULL);
 	ac_renderer_finish_fx();
 	ac_renderer_finish_3D();

@@ -3,7 +3,53 @@
 
 // Main module
 
+#include <string.h>
 #include "ac130.h"
+
+int g_screenWidth = 1024;
+int g_screenHeight = 768;
+bool g_fullScreen = true;
+
+static void parse_args(int argc, char *argv[]) {
+	int i;
+
+	if (argc < 2)
+		return;
+
+	for (i = 1; i < argc; i++) {
+		if (!strcmp(argv[i], "-w")) {
+			g_fullScreen = false;
+			continue;
+		}
+		if (!strcmp(argv[i], "-r") && i + 1 < argc) {
+			char buf[32];
+			float aspect;
+
+			strncpy(buf, argv[++i], sizeof(buf) - 1);
+			char *x = strchr(buf, 'x');
+			if (x == NULL)
+				continue;
+			*x++ = 0;
+			g_screenWidth = atoi(buf);
+			g_screenHeight = atoi(x);
+			// sanitize the values
+			if (g_screenWidth <= 0)
+				g_screenWidth = 1024;
+			if (g_screenHeight <= 0)
+				g_screenHeight = 768;
+			// enforce a 4:3 or 5:4 aspect ratio
+			aspect = (float)g_screenWidth / (float)g_screenHeight;
+			if (fabs(aspect - 4.f / 3.f) > 0.01
+				&& fabs(aspect - 5.f / 4.f) > 0.01) {
+				// OK, this aspect isn't right, shrink the window to get 4:3
+				if (aspect > 1.334)
+					g_screenWidth = 1.33 * g_screenHeight;
+				else
+					g_screenHeight = 0.75 * g_screenWidth;
+			}
+		}
+	}
+}
 
 int main (int argc, char *argv[]) {
 	Uint32		prevTime;	/// Time of the previous frame time in milliseconds.
@@ -19,6 +65,8 @@ int main (int argc, char *argv[]) {
 	uint		dpCount = 0;
 	uint		cpCount = 0;
 	uint		frameCountTime;
+
+	parse_args(argc, argv);
 
 	// initialize SDL
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) < 0) {
@@ -39,11 +87,11 @@ int main (int argc, char *argv[]) {
 	// hide mouse cursor and grab input
 	SDL_ShowCursor(0);
 #ifdef NDEBUG
-	SDL_WM_GrabInput(SDL_GRAB_ON);
 	bool grab = true;
+	SDL_WM_GrabInput(SDL_GRAB_ON);
 #else
-	SDL_WM_GrabInput(SDL_GRAB_OFF);
-	bool grab = false;
+	bool grab = g_fullScreen;
+	SDL_WM_GrabInput(grab ? SDL_GRAB_ON : SDL_GRAB_OFF);
 #endif // NDEBUG
 
 	// make sure SDL cleans up before exit
@@ -66,6 +114,14 @@ int main (int argc, char *argv[]) {
 	// hardcode the first frame time at 20ms to get a bit more accurate results
 	// of the FPS counter on the first FPS calculation
 	prevTime = frameCountTime - 20;
+
+#ifndef NDEBUG
+	// grab the input in debug
+	if (!grab) {
+		SDL_WM_GrabInput(SDL_GRAB_ON);
+		grab = true;
+	}
+#endif
 
 	// program main loop
 	done = false;

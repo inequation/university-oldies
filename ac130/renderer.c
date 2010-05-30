@@ -21,8 +21,9 @@
 #include "compositor_vs.glsl"
 #include "compositor_fs.glsl"
 
-#define SCREEN_WIDTH		1024
-#define SCREEN_HEIGHT		768
+extern int g_screenWidth;
+extern int g_screenHeight;
+extern bool g_fullScreen;
 
 // convenience define for a GL 4x4 matrix
 typedef GLfloat	GLmatrix_t[16];
@@ -47,10 +48,9 @@ ac_vertex_t	g_prop_verts[TREE_BASE + 1			// LOD 0
 							+ TREE_BASE - 4		// LOD 2
 							+ BLDG_FLAT_VERTS
 							+ BLDG_SLNT_VERTS];
-uchar		g_prop_indices[(TREE_BASE + 2		// LOD 0
+uchar		g_prop_indices[TREE_BASE + 2		// LOD 0
 							+ TREE_BASE			// LOD 1
-							+ TREE_BASE - 2)	// LOD 2
-								//* TREES_PER_FIELD
+							+ TREE_BASE - 2		// LOD 2
 							+ BLDG_FLAT_INDICES
 							+ BLDG_SLNT_INDICES];
 uchar		g_prop_texture[PROP_TEXTURE_SIZE * PROP_TEXTURE_SIZE];
@@ -625,6 +625,8 @@ void ac_renderer_start_fx(void) {
 	// make the necessary state changes
 	glBindTexture(GL_TEXTURE_2D, g_fxTex);
 	glEnable(GL_BLEND);
+	// disable writing to the depth buffer to get rid of the ugly artifacts
+	glDepthMask(GL_FALSE);
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, g_fxVBOs[0]);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, g_fxVBOs[1]);
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
@@ -638,6 +640,8 @@ void ac_renderer_finish_fx(void) {
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);
+	// reenable writing to the depth buffer
+	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 	glColor4f(1, 1, 1, 1);
 }
@@ -815,8 +819,10 @@ void ac_renderer_create_font(void) {
 void ac_renderer_draw_string(char *str, float ox, float oy, float scale) {
 	static const float glyph_tw = GLYPH_W / (float)FONT_WIDTH;
 	static const float glyph_th = GLYPH_H / (float)FONT_HEIGHT;
-	float glyph_sw = GLYPH_W / (float)SCREEN_WIDTH * scale;
-	float glyph_sh = GLYPH_H / (float)SCREEN_HEIGHT * scale;
+	// the glyph screen sizes should always be proportional to the 1024x768
+	// resolution
+	float glyph_sw = GLYPH_W / 1024.f * scale;
+	float glyph_sh = GLYPH_H / 768.f * scale;
 
 	int c;
 	float x = ox, y = oy, s, t, dx = glyph_sw, dy = glyph_sh;
@@ -881,7 +887,9 @@ void ac_renderer_draw_string(char *str, float ox, float oy, float scale) {
 
 void ac_renderer_draw_lines(float pts[][2], uint num_pts, float width) {
 	uint i;
-	glLineWidth(width);
+	// need to scale line width because it's absolute in pixels, and we need it
+	// to be relative to window size
+	glLineWidth(width * (float)g_screenWidth / 1024.f);
 	glBegin(GL_LINES);
 	for (i = 0; i < num_pts; i++)
 		glVertex2fv(pts[i]);
@@ -896,7 +904,7 @@ bool ac_renderer_init_FBO(void) {
 	glGenRenderbuffersEXT(1, &g_depthRBO);
 	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, g_depthRBO);
 	glRenderbufferStorageEXT(GL_RENDERBUFFER_EXT, GL_DEPTH_COMPONENT,
-		SCREEN_WIDTH, SCREEN_HEIGHT);
+		g_screenWidth, g_screenHeight);
 	glBindRenderbufferEXT(GL_RENDERBUFFER_EXT, 0);
 
 	// set frame textures up
@@ -916,11 +924,11 @@ bool ac_renderer_init_FBO(void) {
 		glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_FALSE);
 		if (i == FBO_2D)
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8,
-				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+				g_screenWidth, g_screenHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
 				NULL);
 		else
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB8,
-				SCREEN_WIDTH, SCREEN_HEIGHT, 0, GL_RGB, GL_UNSIGNED_BYTE,
+				g_screenWidth, g_screenHeight, 0, GL_RGB, GL_UNSIGNED_BYTE,
 				NULL);
 
 		glBindFramebufferEXT(GL_FRAMEBUFFER_EXT, g_FBOs[i]);
@@ -975,8 +983,8 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
 	SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
 
-	if (!(g_screen = SDL_SetVideoMode(SCREEN_WIDTH, SCREEN_HEIGHT,
-									24, SDL_OPENGL))) {
+	if (!(g_screen = SDL_SetVideoMode(g_screenWidth, g_screenHeight,
+		24, SDL_OPENGL | (g_fullScreen ? SDL_FULLSCREEN : 0)))) {
 		fprintf(stderr, "SDL_SetVideoMode failed: %s\n", SDL_GetError());
 		return false;
 	}
@@ -1122,15 +1130,16 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 		0, 0, 1, 0,	// 8
 		0, 0, 0, 1	// 12
 	};
-	double zNear = 0.1, zFar = 800.0;
+	static const double zNear = 0.1, zFar = 800.0;
 	double x, y;
 	float cy, cp, sy, sp;
 	ac_vec4_t fwd, right, up;
 
 	// scroll the FBO every 27 ms
 	if (time - lastTime >= 27) {
-		g_currentFBO = (g_currentFBO + 1) % (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
-		if (g_currentFBO == FBO_2D)	//
+		g_currentFBO = (g_currentFBO + 1)
+			% (sizeof(g_FBOs) / sizeof(g_FBOs[0]));
+		if (g_currentFBO == FBO_2D)
 			g_currentFBO++;
 		lastTime = time;
 	}
@@ -1141,14 +1150,14 @@ void ac_renderer_start_scene(int time, ac_viewpoint_t *vp) {
 	// clear buffers
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+	// don't bother going further if we don't have a valid viewpoint
+	if (!vp)
+		return;
+
 	// flick some switches for the 3D rendering
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_FOG);
 	glEnable(GL_CULL_FACE);
-
-	// don't bother going further if we don't have a valid viewpoint
-	if (!vp)
-		return;
 
 	g_viewpoint = vp->origin;
 
