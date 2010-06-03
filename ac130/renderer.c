@@ -14,12 +14,14 @@
 
 // some embedded resources
 #define STRINGIFY(A)  #A
+#include "terrain_vs.glsl"
+#include "terrain_fs.glsl"
 #include "prop_vs.glsl"
 #include "prop_fs.glsl"
 #include "font_fs.glsl"
-#include "font.h"
 #include "compositor_vs.glsl"
 #include "compositor_fs.glsl"
+#include "font.h"
 
 extern int g_screenWidth;
 extern int g_screenHeight;
@@ -84,6 +86,11 @@ uint		g_frameTex[1 + FRAME_TRACE];	///< 0 - current frame, > 0 -
 											///< previous ones
 uint		g_currentFBO = 1;
 #define FBO_2D		0
+
+uint		g_terrainProgram = 0;
+uint		g_ter_vs = 0;
+uint		g_ter_fs = 0;
+int			g_ter_patchParams = -1;
 
 uint		g_propProgram = 0;
 uint		g_prop_vs = 0;
@@ -309,6 +316,7 @@ inline float ac_renderer_sample_height(float s, float t) {
 
 void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	int i, j;
+#if TERRAIN_FIXED_PIPELINE
 	GLmatrix_t m = {
 		1, 0, 0, 0,
 		0, 1, 0, 0,
@@ -351,6 +359,7 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	m[13] = 0;
 	m[14] = bv * HEIGHTMAP_SIZE;
 	glMultMatrixf(m);
+#endif
 
 	// sample the heightmap and set vertex Y component
 	ac_vertex_t *v = g_ter_verts;
@@ -359,6 +368,10 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 			v->pos.f[1] = ac_renderer_sample_height(bu + v->st[0] * scale,
 													bv + v->st[1] * scale);
 	}
+
+#ifndef TERRAIN_FIXED_PIPELINE
+	glUniform3fARB(g_ter_patchParams, bu, bv, scale);
+#endif
 
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t),
 					&g_ter_verts[0].pos.f[0]);
@@ -372,11 +385,13 @@ void ac_renderer_terrain_patch(float bu, float bv, float scale, int level) {
 	*g_triCounter += TERRAIN_NUM_INDICES - 2;
 	(*g_displayedPatchCounter)++;
 
+#if TERRAIN_FIXED_PIPELINE
 	// pop both matrices
 	glMatrixMode(GL_TEXTURE);
 	glPopMatrix();
 	glMatrixMode(GL_MODELVIEW);
 	glPopMatrix();
+#endif
 }
 
 void ac_renderer_recurse_terrain(float minU, float minV,
@@ -429,27 +444,14 @@ void ac_renderer_recurse_terrain(float minU, float minV,
 }
 
 void ac_renderer_draw_terrain() {
+#ifdef TERRAIN_FIXED_PIPELINE
 	glPushMatrix();
-
-#if 0
-	// debug coordinate system triangle
-	//glLoadIdentity();
-	glPushMatrix();
-	glTranslatef(0, HEIGHT, 0);
-	glBegin(GL_TRIANGLES);
-	glColor3f(1, 0, 0);
-	glVertex3f(10, 0, 0);
-	glColor3f(0, 1, 0);
-	glVertex3f(0, 10, 0);
-	glColor3f(0, 0, 1);
-	glVertex3f(0, 0, 10);
-	glEnd();
-	glPopMatrix();
-	glColor3f(1, 1, 1);
-#endif
 
 	// centre the terrain
 	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
+#else
+	glUseProgramObjectARB(g_terrainProgram);
+#endif
 
 	glBindTexture(GL_TEXTURE_2D, g_hmapTex);
 
@@ -458,7 +460,12 @@ void ac_renderer_draw_terrain() {
 								g_ter_maxLevels, 1.f);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
+
+#ifndef TERRAIN_FIXED_PIPELINE
+	glUseProgramObjectARB(0);
+#else
 	glPopMatrix();
+#endif
 }
 
 void ac_renderer_create_props(void) {
@@ -740,6 +747,10 @@ inline bool ac_renderer_create_program(const char *id, const char *vss,
 bool ac_renderer_create_shaders(void) {
 	int i, frames[1 + FRAME_TRACE];
 
+	// create the terrain GPU program
+	if (!ac_renderer_create_program("Terrain", TERRAIN_VS, TERRAIN_FS,
+		&g_ter_vs, &g_ter_fs, &g_terrainProgram))
+		return false;
 	// create the compositor GPU program
 	if (!ac_renderer_create_program("Compositor", COMPOSITOR_VS, COMPOSITOR_FS,
 		&g_comp_vs, &g_comp_fs, &g_compositor))
@@ -752,6 +763,24 @@ bool ac_renderer_create_shaders(void) {
 	if (!ac_renderer_create_program("Prop", PROP_VS, PROP_FS,
 		&g_prop_vs, &g_prop_fs, &g_propProgram))
 		return false;
+
+	// set the terrain shader up
+	glUseProgramObjectARB(g_terrainProgram);
+	if ((i = glGetUniformLocationARB(g_terrainProgram, "terTex")) < 0) {
+		fprintf(stderr, "Failed to find terrain texture uniform variable\n");
+		return false;
+	}
+	glUniform1iARB(i, 0);
+	if ((i = glGetUniformLocationARB(g_terrainProgram, "constParams")) < 0) {
+		fprintf(stderr, "Failed to find constant params uniform variable\n");
+		return false;
+	}
+	glUniform2fARB(i, HEIGHTMAP_SIZE, HEIGHT_SCALE);
+	if ((g_ter_patchParams = glGetUniformLocationARB(g_terrainProgram,
+		"patchParams")) < 0) {
+		fprintf(stderr, "Failed to find per-patch params uniform variable\n");
+		return false;
+	}
 
 	// set the prop shader up
 	glUseProgramObjectARB(g_propProgram);
@@ -1014,6 +1043,10 @@ bool ac_renderer_init(uint *vcounter, uint *tcounter,
 		fprintf(stderr, "Hardware does not support multitexturing\n");
 		return false;
 	}
+	if (!GLEW_ARB_vertex_shader) {
+		fprintf(stderr, "Hardware does not support vertex shaders\n");
+		return false;
+	}
 	if (!GLEW_ARB_fragment_shader) {
 		fprintf(stderr, "Hardware does not support fragment shaders\n");
 		return false;
@@ -1103,6 +1136,12 @@ void ac_renderer_shutdown(void) {
 	glDeleteObjectARB(g_prop_fs);
 	glDeleteObjectARB(g_propProgram);
 
+	glDetachObjectARB(g_terrainProgram, g_ter_vs);
+	glDetachObjectARB(g_terrainProgram, g_ter_fs);
+	glDeleteObjectARB(g_ter_vs);
+	glDeleteObjectARB(g_ter_fs);
+	glDeleteObjectARB(g_terrainProgram);
+
 	// close SDL down
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);	// FIXME: this shuts input down as well
 }
@@ -1116,8 +1155,8 @@ void ac_renderer_set_heightmap(void) {
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE8,
 				HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 0,
 				GL_LUMINANCE, GL_UNSIGNED_BYTE, g_heightmap);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }

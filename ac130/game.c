@@ -175,7 +175,7 @@ void ac_game_advance_particles(void) {
 	int i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t tmp;
-	float f, g = 1.f;
+	float v, q, C, g = 1.f;
 	particle_t *p;
 
 	// we need the proper Z-order, so sort the particle array first
@@ -201,25 +201,79 @@ void ac_game_advance_particles(void) {
 		}
 		// find the new position
 		p->pos = ac_vec_add(p->pos, ac_vec_mul(p->vel, g_frameTimeVec));
-		f = ac_vec_decompose(p->vel, &tmp);
+		v = ac_vec_decompose(p->vel, &tmp);
+
+		/*
+		OK, now, in order to make the air drag work properly under any
+		circumstances, we need to calculate an... integral. An analytic one, at
+		that. Let me explain.
+
+		The air drag force equation is a pretty complex one, but if you make a
+		few assumptions and approximations, its acceleration can be simplified
+		to this:
+
+		a = q * v^2
+
+		where q is a constant and q < 0, in order for the acceleration to have a
+		stopping effect. The most natural way to implement this in a real-time
+		simulation would be to just calculate the effect of this acceleration on
+		the velocity, like this:
+
+		v -= q * v^2 * t
+
+		where t is the time step (i. e. frame time). This is basically a form of
+		a discrete integral, and an approximation that is reasonably accurate,
+		as long as the time step stays small enough. However, as the time step
+		grows larger, the approximation becomes increasingly inaccurate due to
+		the quadratic growth, up until a point where the velocity delta induced
+		by the acceleration outweighs the original velocity, and the object
+		starts behaving in a totally erratic way.
+
+		There are two ways to fix this. One is to subdivide the time step if
+		it's too large; the other is to solve the problem analytically, which
+		involves solving a simple differential equation, thus finding the
+		velocity equation. I chose the latter because 1) it's way more accurate
+		and 2) it produces a solution with a constant time of execution.
+
+		So basically, we start with the original acceleration equation:
+
+		a = qv^2
+
+		We substitute dv/dt for a and make some transformations:
+
+		dv/dt = qv^2
+		1/v^2 * dv = qdt
+
+		By integrating both parts of the equation we get:
+
+		-1/v = qt + C
+		v = -1/(qt + C)
+
+		As for the constant C, we can calculate it from boundary value of v(0):
+
+		C = -1/v(0) - q0 = -1/v(0)
+
+		And now we have all we need to solve the problem.
+		*/
+		C = -1.f / v;
 		switch (p->weap) {
 			case WP_M61:
 			case WP_M61_TRACER:
-				f = f * f * -0.25 * g_frameTime;
+				q = -0.35;
 				g = 0.5;
 				// fade the alpha away during the last second
 				if (p->life < 1.f)
 					p->alpha = p->life;
 				break;
 			case WP_L60:
-				f = f * f * -0.8 * g_frameTime;
+				q = -0.925;
 				g = 0.025;
 				// fade the alpha away during the last 2 seconds
 				if (p->life < 2.f)
 					p->alpha = p->life * 0.5;
 				break;
 			case WP_M102:
-				f = f * f * -0.6 * g_frameTime;
+				q = -0.7;
 				g = 0.02;
 				// fade the alpha away during the last 4 seconds
 				if (p->life < 4.f)
@@ -229,8 +283,8 @@ void ac_game_advance_particles(void) {
 				break;
 		}
 		// slow the smoke down
-		tmp = ac_vec_mulf(tmp, f);
-		p->vel = ac_vec_add(p->vel, tmp);
+		v = -1.f / (q * g_frameTime + C);
+		p->vel = ac_vec_mulf(tmp, v);
 		// add reduced gravity
 		tmp = ac_vec_mulf(grav, g);
 		p->vel = ac_vec_add(p->vel, tmp);
@@ -294,7 +348,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 						-50000 + (rand() % 100001),
 						0);
 				dir = ac_vec_normalize(dir);
-				p->vel = ac_vec_mulf(dir, 10 + (rand() % 16));
+				p->vel = ac_vec_mulf(dir, (float)(55 + (rand() % 75)) / 10.f);
 				if (j % 6 == 0)
 					p->vel = ac_vec_mulf(p->vel, 0.2);
 				else if (j % 6 == 1)
@@ -319,7 +373,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 				if (j < 18)
 					dir = ac_vec_set(
 						-30000 + (rand() % 60001),
-						90000,
+						120000,
 						-30000 + (rand() % 60001),
 						0);
 				else
@@ -329,7 +383,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 						-50000 + (rand() % 100001),
 						0);
 				dir = ac_vec_normalize(dir);
-				p->vel = ac_vec_mulf(dir, 130 + (rand() % 21));
+				p->vel = ac_vec_mulf(dir, (j < 18 ? 100 : 80) + (rand() % 19));
 				if (j % 3 == 0)
 					p->vel = ac_vec_mulf(p->vel, 0.35);
 				j++;

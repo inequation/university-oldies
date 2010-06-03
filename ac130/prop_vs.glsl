@@ -31,7 +31,7 @@ void main() {
 	vec3 vVertex = vec3(gl_ModelViewMatrix * instance * gl_Vertex);
 	const float LOG2 = 1.442695;
 	gl_FogFragCoord = length(vVertex);
-	fogFactor = exp2(-/*gl_Fog.density * gl_Fog.density*/0.000004
+	fogFactor = exp2(-gl_Fog.density * gl_Fog.density
 		* gl_FogFragCoord * gl_FogFragCoord * LOG2);
 	fogFactor = clamp(fogFactor, 0.0, 1.0);
 }

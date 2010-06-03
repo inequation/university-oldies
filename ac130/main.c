@@ -211,6 +211,11 @@ int main (int argc, char *argv[]) {
 		ac_game_frame(curTime, frameTime, &curInput);
 		prevInput = curInput;
 		frameCount++;
+
+#if	0
+		// bad performance simulation
+		SDL_Delay(100);
+#endif
 	} // end main loop
 
 	// show mouse cursor and release input

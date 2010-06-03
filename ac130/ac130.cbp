@@ -129,6 +129,8 @@
 		<Unit filename="renderer.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="terrain_fs.glsl" />
+		<Unit filename="terrain_vs.glsl" />
 		<Extensions>
 			<code_completion />
 			<envvars />
