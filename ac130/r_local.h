@@ -68,18 +68,18 @@ void r_destroy_props(void);
 // FX engine
 /// Creates all special effects resources.
 void r_create_fx(void);
-void r_start_fx(void);
+/*void r_start_fx(void);
 void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
-void r_finish_fx(void);
+void r_finish_fx(void);*/
 /// Frees all special effects resources.
 void r_destroy_fx(void);
 
 // 2D drawing module
 /// Creates font resources.
 void r_create_font(void);
-void r_draw_string(char *str, float ox, float oy, float scale);
-void r_draw_lines(float pts[][2], uint num_pts, float width);
+/*void r_draw_string(char *str, float ox, float oy, float scale);
+void r_draw_lines(float pts[][2], uint num_pts, float width);*/
 /// Frees font resources.
 void r_destroy_font(void);
 
@@ -96,6 +96,7 @@ extern uint	r_font_prog;		///< font rendering program
 extern uint	r_comp_prog;		///< compositing program
 // uniform variables
 extern int	r_ter_patch_params;	///< per-patch terrain parameters
+extern int	r_ter_height_samples;	///< height samples table
 extern int	r_comp_frames;		///< frame texture indices
 extern int	r_comp_neg;			///< colour inversion coefficient
 extern int	r_comp_contrast;	///< contrast enhancement coefficient

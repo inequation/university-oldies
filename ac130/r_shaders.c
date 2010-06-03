@@ -19,6 +19,7 @@ uint		r_ter_prog = 0;
 uint		r_ter_vs = 0;
 uint		r_ter_fs = 0;
 int			r_ter_patch_params = -1;
+int			r_ter_height_samples = -1;
 
 uint		r_prop_prog = 0;
 uint		r_prop_vs = 0;
@@ -125,6 +126,11 @@ bool r_create_shaders(void) {
 	if ((r_ter_patch_params = glGetUniformLocationARB(r_ter_prog,
 		"patchParams")) < 0) {
 		fprintf(stderr, "Failed to find per-patch params uniform variable\n");
+		return false;
+	}
+	if ((r_ter_height_samples = glGetUniformLocationARB(r_ter_prog,
+		"heightSamples")) < 0) {
+		fprintf(stderr, "Failed to find height samples uniform variable\n");
 		return false;
 	}
 

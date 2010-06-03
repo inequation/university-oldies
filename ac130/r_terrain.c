@@ -26,6 +26,13 @@
 										+ TERRAIN_NUM_SKIRT_INDICES)
 #define TERRAIN_LOD					40.f
 
+// uncomment to enable uniform-based height transfers instead of VBO
+// retransmissions
+#define UNIFORM_HEIGHTS
+// uncomment to enable buffer memory mapping instead of reuploading the entire
+// geometry every time
+//#define MAP_VBO
+
 // resources
 GLuint		r_hmap_tex;
 int			r_ter_max_levels;
@@ -94,7 +101,7 @@ static void r_fill_terrain_vertices(ac_vertex_t *verts) {
 			s = j * invScaleX;
 			v->st[0] = s;
 			v->st[1] = t;
-			v->pos = ac_vec_set(s, 0.f, t, 0.f);
+			v->pos = ac_vec_set(s, 1.f, t, 0.f);
 			v++;
 		}
 	}
@@ -104,11 +111,11 @@ static void r_fill_terrain_vertices(ac_vertex_t *verts) {
 		s = j * invScaleX;
 		v->st[0] = s;
 		v->st[1] = 1.f;
-		v->pos = ac_vec_set(s, -10.f, 1.f, 0.f);
+		v->pos = ac_vec_set(s, -1.f, 1.f, 0.f);
 		v++;
 		v->st[0] = s;
 		v->st[1] = 0.f;
-		v->pos = ac_vec_set(s, -10.f, 0.f, 0.f);
+		v->pos = ac_vec_set(s, -1.f, 0.f, 0.f);
 		v++;
 	}
 
@@ -116,11 +123,11 @@ static void r_fill_terrain_vertices(ac_vertex_t *verts) {
 		t = 1.f - i * invScaleY;
 		v->st[0] = 0.f;
 		v->st[1] = t;
-		v->pos = ac_vec_set(0.f, -10.f, t, 0.f);
+		v->pos = ac_vec_set(0.f, -1.f, t, 0.f);
 		v++;
 		v->st[0] = 1.f;
 		v->st[1] = t;
-		v->pos = ac_vec_set(1.f, -10.f, t, 0.f);
+		v->pos = ac_vec_set(1.f, -1.f, t, 0.f);
 		v++;
 	}
 	assert(v - verts == TERRAIN_NUM_VERTS);
@@ -150,7 +157,13 @@ void r_create_terrain(void) {
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, r_ter_VBOs[0]);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, r_ter_VBOs[1]);
 	glBufferDataARB(GL_ARRAY_BUFFER_ARB,
-		sizeof(r_ter_verts), r_ter_verts, GL_DYNAMIC_DRAW_ARB);
+		sizeof(r_ter_verts), r_ter_verts,
+#ifndef UNIFORM_HEIGHTS
+		GL_DYNAMIC_DRAW_ARB
+#else
+		GL_STATIC_DRAW_ARB
+#endif
+	);
 	glBufferDataARB(GL_ELEMENT_ARRAY_BUFFER_ARB,
 		sizeof(indices), indices, GL_STATIC_DRAW_ARB);
 	// unbind VBOs
@@ -184,69 +197,37 @@ static inline float r_sample_height(float s, float t) {
 	return (float)gen_heightmap[y * HEIGHTMAP_SIZE + x];
 }
 
-// uncomment to enable buffer memory mapping instead of reuploading the entire
-// geometry every time
-//#define MAP_VBO
-#ifdef MAP_VBO
+#if !defined(UNIFORM_HEIGHTS) && defined(MAP_VBO)
 // uncomment to enable read/write access to the VBO, thus slightly reducing the
 // number of calculations; this may be offset by optimized DMA of a write-only,
 // though, which is why we have it as a toggleable option
 #define RW_TERRAIN_VBO
 #endif
-static void r_terrain_patch(float bu, float bv, float scale, int level) {
+static void r_terrain_patch(float bu, float bv, float scale) {
 	int i, j;
-#if defined(MAP_VBO) && defined(RW_TERRAIN_VBO)
+#if defined(UNIFORM_HEIGHTS) || (defined(MAP_VBO) && defined(RW_TERRAIN_VBO))
 	float s, t;
 	static const float invScaleX = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
 	static const float invScaleY = 1.f / (TERRAIN_PATCH_SIZE - 1.f);
 #endif
+#ifdef UNIFORM_HEIGHTS
+	float heights[TERRAIN_PATCH_SIZE * TERRAIN_PATCH_SIZE + 3];
+#else
 	ac_vertex_t *v;
-#if TERRAIN_FIXED_PIPELINE
-	static GLmatrix_t m = {
-		1, 0, 0, 0,
-		0, 1, 0, 0,
-		0, 0, 1, 0,
-		0, 0, 0, 1
-	};
-
-	// create the texture matrix for the patch...
-	glMatrixMode(GL_TEXTURE);
-	glPushMatrix();
-	// column 1
-	m[0] = scale;
-	//m[1] = 0;
-	//m[2] = 0;
-	//m[3] = 0;
-	// column 2
-	//m[4] = 0;
-	m[5] = scale;
-	//m[6] = 0;
-	//m[7] = 0;
-	// column 3
-	//m[8] = 0;
-	//m[9] = 0;
-	//m[10] = 1;
-	//m[11] = 0;
-	// column 4
-	m[12] = bu;
-	m[13] = bv;
-	//m[14] = 0;
-	//m[15] = 1;
-	glLoadMatrixf(m);
-	// ...and the modelview one
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	// only make the necessary changes
-	m[0] *= HEIGHTMAP_SIZE;
-	m[5] = HEIGHT_SCALE;
-	m[10] = scale * HEIGHTMAP_SIZE;
-	m[12] = bu * HEIGHTMAP_SIZE;
-	m[13] = 0;
-	m[14] = bv * HEIGHTMAP_SIZE;
-	glMultMatrixf(m);
 #endif
 
-#ifdef MAP_VBO
+#ifdef UNIFORM_HEIGHTS
+	for (i = 0; i < TERRAIN_PATCH_SIZE; i++) {
+		t = /*(1.f - */i * invScaleY/*)*/ * scale;
+		for (j = 0; j < TERRAIN_PATCH_SIZE; j++) {
+			s = j * invScaleX * scale;
+			heights[i * TERRAIN_PATCH_SIZE + j] = r_sample_height(bu + s,
+																bv + t);
+		}
+	}
+	glUniform4fvARB(r_ter_height_samples,
+		sizeof(heights) / (sizeof(heights[0]) * 4), heights);
+#elif defined(MAP_VBO)
 	// sample the heightmap and set vertex Y component
 	v = glMapBufferARB(GL_ARRAY_BUFFER_ARB,
 #ifdef RW_TERRAIN_VBO
@@ -289,10 +270,7 @@ static void r_terrain_patch(float bu, float bv, float scale, int level) {
 	glBufferDataARB(GL_ARRAY_BUFFER_ARB,
 		sizeof(r_ter_verts), r_ter_verts, GL_STREAM_DRAW_ARB);
 #endif
-
-#ifndef TERRAIN_FIXED_PIPELINE
 	glUniform3fARB(r_ter_patch_params, bu, bv, scale);
-#endif
 
 	glVertexPointer(3, GL_FLOAT, sizeof(ac_vertex_t), (void *)0);
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
@@ -304,14 +282,6 @@ static void r_terrain_patch(float bu, float bv, float scale, int level) {
 	*r_vert_counter += TERRAIN_NUM_VERTS;
 	*r_tri_counter += TERRAIN_NUM_INDICES - 2;
 	(*r_visible_patch_counter)++;
-
-#if TERRAIN_FIXED_PIPELINE
-	// pop both matrices
-	glMatrixMode(GL_TEXTURE);
-	glPopMatrix();
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
-#endif
 }
 
 static void r_recurse_terrain(float minU, float minV,
@@ -349,7 +319,7 @@ static void r_recurse_terrain(float minU, float minV,
 	float f2 = ac_vec_dot(v, v) / d2;
 
 	if (f2 > TERRAIN_LOD * TERRAIN_LOD || level < 1)
-		r_terrain_patch(minU, minV, scale, level);
+		r_terrain_patch(minU, minV, scale);
 	else {
 		scale *= 0.5;
 		r_recurse_terrain(minU, minV, halfU, halfV, level - 1,
@@ -364,13 +334,7 @@ static void r_recurse_terrain(float minU, float minV,
 }
 
 void r_draw_terrain(void) {
-#ifdef TERRAIN_FIXED_PIPELINE
-	glPushMatrix();
-	// centre the terrain
-	glTranslatef(-HEIGHTMAP_SIZE / 2, 0, -HEIGHTMAP_SIZE / 2);
-#else
 	glUseProgramObjectARB(r_ter_prog);
-#endif
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, r_ter_VBOs[0]);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, r_ter_VBOs[1]);
 	glBindTexture(GL_TEXTURE_2D, r_hmap_tex);
@@ -382,9 +346,5 @@ void r_draw_terrain(void) {
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
-#ifndef TERRAIN_FIXED_PIPELINE
 	glUseProgramObjectARB(0);
-#else
-	glPopMatrix();
-#endif
 }

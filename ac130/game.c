@@ -172,7 +172,7 @@ int g_particle_cmp(const void *p1, const void *p2) {
 
 #define USE_QSORT
 void g_advance_particles(void) {
-	int i;
+	size_t i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t tmp;
 	float v, q, C, g = 1.f;
@@ -294,7 +294,7 @@ void g_advance_particles(void) {
 }
 
 void g_explode(ac_vec4_t pos, weap_t w) {
-	int i, j;
+	size_t i, j;
 	particle_t *p;
 	ac_vec4_t dir;
 
@@ -395,7 +395,7 @@ void g_explode(ac_vec4_t pos, weap_t w) {
 }
 
 void g_advance_projectiles(void) {
-	int i;
+	size_t i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t npos, ip;
 	ac_vec4_t ofs = ac_vec_set(HEIGHTMAP_SIZE / 2, 0, HEIGHTMAP_SIZE / 2, 0);
@@ -454,7 +454,7 @@ void g_advance_projectiles(void) {
 }
 
 void g_fire_weapon(weap_t w) {
-	int i;
+	size_t i;
 	static int m61 = 0;
 	//printf("FIRE! %d\n", (int)w);
 	// find a free projectile slot

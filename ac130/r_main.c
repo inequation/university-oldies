@@ -125,7 +125,7 @@ cullResult_t r_cull_bbox(ac_vec4_t bounds[2]) {
 }
 
 static bool r_init_FBO(void) {
-	int i;
+	size_t i;
 	GLenum status;
 
 	// depth RBO initialization

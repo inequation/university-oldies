@@ -14,9 +14,7 @@ static uint		gen_seed = 0;
 /// Internal pseudorandom number generator.
 int gen_rand(void) {
 	gen_seed = (16807LL * (gen_seed + 1)) % 2147483647;
-	if (gen_seed < 0)
-		gen_seed += 2147483647;
-	return (gen_seed - 1);
+	return gen_seed - 1;
 }
 
 /// Perlin noise permutation table.
@@ -81,8 +79,9 @@ static float gen_perlin(float x, float y, float z) {
 #undef fade
 #undef lerp
 
-static void gen_cloudmap(char *dst, int size) {
-	int i, x, y, xoff, yoff, pix;
+static void gen_cloudmap(char *dst, size_t size) {
+	size_t i, x, y, xoff, yoff;
+	int pix;
 	char *submaps[3];
 	char *c;
 	float freq;
