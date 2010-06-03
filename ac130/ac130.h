@@ -16,6 +16,9 @@
 // our own math module
 #include "ac_math.h"
 
+/// \file ac130.h
+/// \brief Public interfaces to all modules.
+
 // =========================================================
 // Type definitions
 // =========================================================
@@ -92,58 +95,60 @@ extern bool m_full_screen;
 // Content generator interface
 // =========================================================
 
-/// size of terrain height map (in pixels; 1 pixel translates to 1 square metre
-/// in game world)
+/// \brief size of terrain height map
+/// (in pixels; 1 pixel translates to 1 square metre in game world)
 #define HEIGHTMAP_SIZE		1024
-/// height amplitude in metres
+/// \brief height amplitude in metres
 #define HEIGHT				50.f
-/// scaling factor to use when converting from heightmap bytes to game world
-/// heights
+/// \brief height scaling factor
+/// used when converting from heightmap bytes to game world height
 #define HEIGHT_SCALE		(HEIGHT / 255.f)
 
-/// number of vertices in the base of the tree at the highest level of detail
+/// \brief number of vertices in the base of the tree
+/// at the highest level of detail
 #define TREE_BASE			7
-/// number of vertices in a building prop with a flat roof
+/// \brief number of vertices in a building prop with a flat roof
 #define BLDG_FLAT_VERTS		8
-/// number of indices in a flat-roofed building prop's triangle strip
+/// \brief number of indices in a flat-roofed building prop's triangle strip
 #define BLDG_FLAT_INDICES	16
-/// number of vertices in a building prop with a slanted roof
+/// \brief number of vertices in a building prop with a slanted roof
 #define BLDG_SLNT_VERTS		10
-/// number of indices in a slanted-roofed building prop's triangle strip
+/// \brief number of indices in a slanted-roofed building prop's triangle strip
 #define BLDG_SLNT_INDICES	28
-/// dimension of the prop texture (both width and height)
+/// \brief dimension of the prop texture (both width and height)
 #define PROP_TEXTURE_SIZE	64
 
-/// bit shift to apply when operating on the prop map; 2^4 = 16, which means
-/// that 1 square of the prop map covers a 16*16 square of the height map
+/// \brief bit shift to apply when operating on the prop map;
+/// 2^4 = 16, which means that 1 square of the prop map covers a 16*16 square of
+/// the height map
 #define PROPMAP_SHIFT		4
-/// dimension of the prop map (both width and height)
+/// \brief dimension of the prop map (both width and height)
 #define PROPMAP_SIZE		(HEIGHTMAP_SIZE >> PROPMAP_SHIFT)
-/// fraction of the entire terrain's surface area to be covered by trees
+/// \brief fraction of the entire terrain's surface area to be covered by trees
 #define TREE_COVERAGE		0.6
-/// fraction of the entire terrain's surface area to be covered by buildings
+/// \brief fraction of the entire terrain's surf. area to be used by buildings
 #define BLDG_COVERAGE		0.08
-/// number of trees to plant per prop map square
+/// \brief number of trees to plant per prop map square
 #define TREES_PER_FIELD		25
-/// number of buildings to plant per prop map square
+/// \brief number of buildings to plant per prop map square
 #define BLDGS_PER_FIELD		1
 
-/// maximum number of trees in the entire game world
+/// \brief maximum number of trees in the entire game world
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
-/// maximum number of buildings in the entire game world
+/// \brief maximum number of buildings in the entire game world
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
 
-/// dimension of the special effects texture (both width and height)
+/// \brief dimension of the special effects texture (both width and height)
 #define FX_TEXTURE_SIZE		256
 
-/// heightmap byte array
+/// \brief heightmap byte array
 extern uchar				gen_heightmap[];
-/// root of the prop tree
+/// \brief root of the prop tree
 extern ac_prop_t			*gen_proptree;
 
-/// Generates the terrain heightmap.
+/// \brief Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it
 ///						should not be freed.
 /// \return				constant pointer to the heightmap
@@ -151,20 +156,20 @@ extern ac_prop_t			*gen_proptree;
 ///						sequence each run
 void gen_terrain(int seed);
 
-/// Generates props (trees, buildings) resources.
+/// \brief Generates props (trees, buildings) resources.
 /// \param texture		texture byte array
 /// \param verts		vertex array
 /// \param indices		index array
 void gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
 
-/// Generates FX (bullet tracers, explosions, smoke plums etc.) resources.
+/// \brief Generates special effects resources.
 /// \param texture		texture byte array
 /// \param verts		vertex array
 /// \param indices		index array
 void gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
-/// Generates prop (tree and buildings) lists.
+/// \brief Generates prop (tree and buildings) lists.
 /// \note				Both trees and bldgs must be preallocated by the caller.
 /// \param numTrees		pointer to where to store the tree count
 /// \param trees		the array to which to write the prop placement
@@ -175,8 +180,7 @@ void gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
 void gen_proplists(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs);
 
-/// Frees the memory allocated for the given prop tree node and all of its
-/// children.
+/// \brief Frees the given prop tree node and all of its children.
 /// \param n			pointer to the node of the tree to free (pass NULL to
 ///						free the entire tree)
 void gen_free_proptree(ac_prop_t *n);
@@ -185,7 +189,7 @@ void gen_free_proptree(ac_prop_t *n);
 // Renderer interface
 // =========================================================
 
-/// Initializes the renderer.
+/// \brief Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
 /// \param tcounter		triangle counter address (for performance measurement)
 /// \param dpcounter	displayed terrain patch counter address
@@ -194,26 +198,29 @@ void gen_free_proptree(ac_prop_t *n);
 bool r_init(uint *vcounter, uint *tcounter,
 					uint *dpcounter, uint *cpcounter);
 
-/// Shuts the renderer down.
+/// \brief Shuts the renderer down.
 void r_shutdown(void);
 
-/// Sets new terrain heightmap.
+/// \brief Sets new terrain heightmap.
 void r_set_heightmap();
 
-/// Starts the rendering of the next frame. Also sts the point of view.
+/// \brief Starts the rendering of a new frame. Also sets the point of view.
 /// \note				Must be called *before* \ref r_finish3D
 void r_start_scene(int time, ac_viewpoint_t *vp);
 
-/// Starts the FX rendering stage - calls the necessary state changes, etc.
+/// \brief Starts the FX rendering stage.
+/// Makes the necessary state changes, etc.
 /// \sa r_finish_fx
 /// \sa r_draw_tracer
 void r_start_fx(void);
 
-/// Finishes the FX rendering stage - calls the necessary state changes, etc.
+/// \brief Finishes the FX rendering stage.
+/// Makes the necessary state changes, etc.
 /// \sa r_start_fx
 /// \sa r_draw_tracer
 void r_finish_fx(void);
 
+/// \brief Draws a smoke particle.
 /// Draws a smoke particle at the given position with the given scale and alpha.
 /// \param pos			position of the smoke particle
 /// \param scale		scale of the particle
@@ -221,7 +228,7 @@ void r_finish_fx(void);
 /// \param angle		angle by which to rotate the particle
 void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 
-/// Draws a bullet tracer at the given position in the given direction.
+/// \brief Draws a bullet tracer at the given position in the given direction.
 /// \note				Must be called *after* \ref r_start_fx and
 ///						*before* \ref r_finish_fx
 /// \param pos			position of the tracer
@@ -229,10 +236,11 @@ void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 /// \param scale		scale of the tracer (length in metres, width in pixels)
 void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 
-/// Draws a string at the given normalized coordinates (in the [0..1] range) in
-/// the given scale. The text will be top-left-aligned. Newlines ('\n'
-/// characters) will be respected, but only the printable ASCII characters in
-/// the 32-91 code range will be drawn (others will be replaced by spaces).
+/// \brief Draws a string at given normalized coordinates in given scale.
+/// Coordinates must fall in the [0..1] range. The text will be top-left-
+/// aligned. Newlines ('\\n' characters) will be respected, but only the
+/// printable ASCII characters in the 32-91 code range will be drawn (others
+/// will be replaced by spaces).
 /// \note				Negative coordinates will invert the alignment on the
 ///						corresponding axis; e.g. passing (-1, -1) will cause the
 ///						text to be drawn from the bottom-right corner, growing
@@ -243,28 +251,28 @@ void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 /// \param scale		scale of the text
 void r_draw_string(char *str, float ox, float oy, float scale);
 
-/// Draws a set of line segments. Coordinates must be normalized (in the [0..1]
-/// range).
+/// \brief Draws a set of line segments.
+/// Coordinates must be normalized (in the [0..1] range).
 /// \param pts			array of 2-element float arrays that contain the point
 ///						coordinates
 /// \param num_pts		number of points in the array
 /// \param width		desired width of the line segments in pixels
 void r_draw_lines(float pts[][2], uint num_pts, float width);
 
-/// Finishes the 3D rendering stage - flushes the scene to the render target and
-/// switches to the 2D (HUD) stage.
+/// \brief Finishes the 3D rendering stage.
+/// Flushes the scene to the render target and switches to the 2D (HUD) stage.
 /// \note				Must be called *after* \ref r_start_scene and
 ///						*before* \ref r_finish2D
 void r_finish_3D(void);
 
-/// Finishes the 2D rendering stage - flushes the 2D (HUD) elements to the
-/// render target.
+/// \brief Finishes the 2D rendering stage.
+/// Flushes the 2D (HUD) elements to the render target.
 /// \note				Must be called *after* \ref r_finish3D and
 ///						*before* \ref r_composite
 void r_finish_2D(void);
 
-/// Combines the 3D and 2D parts of the scene, runs post-processing effects and
-/// outputs the frame to screen.
+/// \brief Combines the 3D and 2D parts of the scene.
+/// Also runs post-processing effects and outputs the result frame to screen.
 /// \param negative		fraction of display negative influence (for smooth
 ///						positive-negative transitions)
 /// \param contrast		fraction of contrast enhancement (for more prominent
@@ -299,20 +307,21 @@ typedef struct {
 	short				deltaX, deltaY;	///< mouse motion deltas
 } ac_input_t;
 
-/// Initializes the game logic.
+/// \brief Initializes the game logic.
 /// \return true on success
 bool g_init(void);
 
-/// Shuts the game logic down.
+/// \brief Shuts the game logic down.
 void g_shutdown(void);
 
-/// Advances the game world by one frame.
+/// \brief Advances the game world by one frame.
 /// \param ticks		number of ticks (milliseconds) since the start of game
 /// \param frameTime	time elapsed since last frame in seconds
 /// \param input		current state of player input
 void g_frame(int ticks, float frameTime, ac_input_t *input);
 
-/// Updates the game loading screen. Only to be called before \ref g_init
+/// \brief Updates the game loading screen.
+/// \note				Only to be called before \ref g_init
 void g_loading_tick(void);
 
 #endif // AC130_H

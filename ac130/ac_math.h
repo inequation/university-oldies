@@ -6,6 +6,9 @@
 
 #include <math.h>
 
+/// \file ac_math.h
+/// \brief Public interface to the math module.
+
 // general math
 #define MIN(a, b)			((a) < (b) ? (a) : (b))
 #define MAX(a, b)			((a) > (b) ? (a) : (b))

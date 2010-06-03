@@ -138,8 +138,12 @@ void gen_terrain(int seed) {
 	char *cloudmap = malloc(sizeof(gen_heightmap));
 	float freq;
 
-	gen_seed = seed;
+	// HACK: this xor is a litle manipulation to keep a pre-bugfix landscape for
+	// a particular random seed (the seed used to be initialized after the
+	// frequency) while maintaining the randomness of the algorithm
+	gen_seed = seed ^ 0xDEADBEEF;
 	freq = 0.005 + 0.000001 * (float)((gen_rand() % 6000) - 3000);
+	gen_seed = seed;
 	xoff = gen_rand() % (HEIGHTMAP_SIZE);
 	yoff = gen_rand() % (HEIGHTMAP_SIZE);
 

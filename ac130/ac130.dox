@@ -1,0 +1,20 @@
+/**
+\mainpage AC-130 - a 3D arcade shooter game
+\b Computer \b Programming \b Laboratory
+\date Gliwice, June 11, 2010
+\author Leszek Godlewski <leszgod081@student.polsl.pl>\n
+Computer Science, sem. II, gr. I, section I\n
+Teacher: Tomasz Wojdyła\n
+
+\section toc Table of contents
+-# \ref intro
+-# Analysis and design
+	-# \ref arch
+	-# \ref generator
+	-# \ref renderer
+	-# \ref game
+-# \ref extern_spec
+-# \ref intern_spec
+-# \ref testing
+-# \ref conclusions
+**/

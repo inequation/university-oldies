@@ -87,7 +87,7 @@ float			g_expl_time = -EXPLOSION_TIME;
 
 bool g_init(void) {
 	// set new terrain heightmap
-	gen_terrain(0xDEADF00D);
+	gen_terrain(0xDEADBEEF);
 	r_set_heightmap();
 
 	// generate proplists

@@ -15,6 +15,9 @@
 #include <SDL/SDL_opengl.h>
 #include <GL/glu.h>
 
+/// \file r_local.h
+/// \brief Private interfaces to all renderer modules.
+
 /// Convenience define for an OpenGL 4x4 matrix.
 typedef GLfloat	GLmatrix_t[16];
 

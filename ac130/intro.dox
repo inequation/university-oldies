@@ -1,0 +1,8 @@
+/**
+\page intro Introduction
+For my second semester project in programming I decided to write a simple, yet fun and visually impressive game. Being a fan of the \e Call \e of \e Duty series, I thought it would be cool to "promote" the level from \e Call \e of \e Duty \e 4: \e Modern \e Warfare called \e "Death \e From \e Above", in which the player assumes the role of a thermal vision TV operator aboard an AC-130 gunship, to a stand-alone game.
+
+This wasn't the only goal of the project, though. I also wanted to make as much content as possible procedurally generated. As a result, the Linux game executable is 320 kB, 256 kB of which is occupied by the font texture bitmap - the only non-procedurally generated element of the game.
+
+Next: \ref arch
+**/

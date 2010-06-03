@@ -126,7 +126,23 @@
 		</Unit>
 		<Unit filename="prop_fs.glsl" />
 		<Unit filename="prop_vs.glsl" />
-		<Unit filename="renderer.c">
+		<Unit filename="r_2D.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="r_fx.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="r_local.h" />
+		<Unit filename="r_main.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="r_props.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="r_shaders.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="r_terrain.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="terrain_fs.glsl" />
