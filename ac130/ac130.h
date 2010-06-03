@@ -55,59 +55,93 @@ typedef struct {
 
 /// Prop tree node structure.
 typedef struct ac_prop_s {
-	ac_vec4_t				bounds[2];	/// 2 points describing the AABB (axis-
-										/// aligned bounding box) of the node
-	struct ac_prop_s		*child[4];	/// pointers to children nodes
-	ac_tree_t				*trees;		/// tree array (NULL if node is a branch
-										/// or a building prop leaf)
-	ac_bldg_t				*bldgs;		/// building array (NULL if node is a
-										/// branch or a tree prop leaf)
+	ac_vec4_t				bounds[2];	///< 2 points describing the AABB (axis-
+										///< aligned bounding box) of the node
+	struct ac_prop_s		*child[4];	///< pointers to children nodes
+	ac_tree_t				*trees;		///< tree array (NULL if node is a
+										///< branch or a building prop leaf)
+	ac_bldg_t				*bldgs;		///< building array (NULL if node is a
+										///< branch or a tree prop leaf)
 } ac_prop_t;
 
 /// Viewpoint definition structure.
 typedef struct {
-	ac_vec4_t	origin;		/// camera position
-	float		angles[2];	/// camera direction defined by yaw and pitch angles
-	float		fov;		/// field of view angle in radians
+	ac_vec4_t	origin;		///< camera position
+	float		angles[2];	///< camera direction defined by yaw and pitch angles
+	float		fov;		///< field of view angle in radians
 } ac_viewpoint_t;
 
 /// Geometry vertex.
 typedef struct {
-	ac_vec4_t	pos;		/// vertex position
-	float		st[2];		/// texture coordinates
+	ac_vec4_t	pos;		///< vertex position
+	float		st[2];		///< texture coordinates
 } ac_vertex_t;
+
+// =========================================================
+// Main module interface
+// =========================================================
+
+/// game screen width in pixels
+extern int m_screen_width;
+/// game screen height in pixels
+extern int m_screen_height;
+/// whether the game is running in full screen mode or not
+extern bool m_full_screen;
 
 // =========================================================
 // Content generator interface
 // =========================================================
 
+/// size of terrain height map (in pixels; 1 pixel translates to 1 square metre
+/// in game world)
 #define HEIGHTMAP_SIZE		1024
+/// height amplitude in metres
 #define HEIGHT				50.f
+/// scaling factor to use when converting from heightmap bytes to game world
+/// heights
 #define HEIGHT_SCALE		(HEIGHT / 255.f)
 
+/// number of vertices in the base of the tree at the highest level of detail
 #define TREE_BASE			7
+/// number of vertices in a building prop with a flat roof
 #define BLDG_FLAT_VERTS		8
+/// number of indices in a flat-roofed building prop's triangle strip
 #define BLDG_FLAT_INDICES	16
+/// number of vertices in a building prop with a slanted roof
 #define BLDG_SLNT_VERTS		10
+/// number of indices in a slanted-roofed building prop's triangle strip
 #define BLDG_SLNT_INDICES	28
+/// dimension of the prop texture (both width and height)
 #define PROP_TEXTURE_SIZE	64
 
+/// bit shift to apply when operating on the prop map; 2^4 = 16, which means
+/// that 1 square of the prop map covers a 16*16 square of the height map
 #define PROPMAP_SHIFT		4
+/// dimension of the prop map (both width and height)
 #define PROPMAP_SIZE		(HEIGHTMAP_SIZE >> PROPMAP_SHIFT)
+/// fraction of the entire terrain's surface area to be covered by trees
 #define TREE_COVERAGE		0.6
-#define BLDG_COVERAGE		0.1
+/// fraction of the entire terrain's surface area to be covered by buildings
+#define BLDG_COVERAGE		0.08
+/// number of trees to plant per prop map square
 #define TREES_PER_FIELD		25
+/// number of buildings to plant per prop map square
 #define BLDGS_PER_FIELD		1
 
+/// maximum number of trees in the entire game world
 #define MAX_NUM_TREES		(TREES_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * TREE_COVERAGE)
+/// maximum number of buildings in the entire game world
 #define MAX_NUM_BLDGS		(BLDGS_PER_FIELD								\
 								* PROPMAP_SIZE * PROPMAP_SIZE * BLDG_COVERAGE)
 
+/// dimension of the special effects texture (both width and height)
 #define FX_TEXTURE_SIZE		256
 
-extern uchar				g_heightmap[];
-extern ac_prop_t			*g_proptree;
+/// heightmap byte array
+extern uchar				gen_heightmap[];
+/// root of the prop tree
+extern ac_prop_t			*gen_proptree;
 
 /// Generates the terrain heightmap.
 /// \note				The heightmap is stored in stack memory, therefore it
@@ -115,20 +149,20 @@ extern ac_prop_t			*g_proptree;
 /// \return				constant pointer to the heightmap
 /// \param seed			random number seed; ensures identical random number
 ///						sequence each run
-void ac_gen_terrain(int seed);
+void gen_terrain(int seed);
 
 /// Generates props (trees, buildings) resources.
 /// \param texture		texture byte array
 /// \param verts		vertex array
 /// \param indices		index array
-void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
+void gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
 
 /// Generates FX (bullet tracers, explosions, smoke plums etc.) resources.
 /// \param texture		texture byte array
 /// \param verts		vertex array
 /// \param indices		index array
-void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
+void gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
 
 /// Generates prop (tree and buildings) lists.
 /// \note				Both trees and bldgs must be preallocated by the caller.
@@ -138,41 +172,18 @@ void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices);
 /// \param numBldgs		pointer to where to store the building count
 /// \param bldgs		the array to which to write the prop placement
 ///						information
-void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
+void gen_proplists(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs);
 
 /// Frees the memory allocated for the given prop tree node and all of its
 /// children.
 /// \param n			pointer to the node of the tree to free (pass NULL to
 ///						free the entire tree)
-void ac_gen_free_proptree(ac_prop_t *n);
+void gen_free_proptree(ac_prop_t *n);
 
 // =========================================================
 // Renderer interface
 // =========================================================
-
-#define TERRAIN_PATCH_SIZE			17
-#define TERRAIN_PATCH_SIZE_F		17.f
-#define TERRAIN_NUM_VERTS			(										\
-										TERRAIN_PATCH_SIZE					\
-										* TERRAIN_PATCH_SIZE				\
-										+ TERRAIN_PATCH_SIZE * 4 - 4		\
-									)	// plus skirt verts at each edge minus
-										// duplicated corners
-#define TERRAIN_NUM_BODY_INDICES	(										\
-										(2 * TERRAIN_PATCH_SIZE + 2)		\
-										* (TERRAIN_PATCH_SIZE - 1)			\
-									)
-#define TERRAIN_NUM_SKIRT_INDICES	(										\
-										2 * (TERRAIN_PATCH_SIZE * 2			\
-											+ 2 * (TERRAIN_PATCH_SIZE - 2))	\
-										+ 2									\
-									)	// + 2 degenerate triangles
-#define TERRAIN_NUM_INDICES			(TERRAIN_NUM_BODY_INDICES				\
-										+ TERRAIN_NUM_SKIRT_INDICES)
-#define TERRAIN_LOD					40.f
-
-#define PROP_LOD_DISTANCE	250.f
 
 /// Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
@@ -180,43 +191,43 @@ void ac_gen_free_proptree(ac_prop_t *n);
 /// \param dpcounter	displayed terrain patch counter address
 /// \param cpcounter	culled terrain patch counter address
 /// \return				true on success
-bool ac_renderer_init(uint *vcounter, uint *tcounter,
+bool r_init(uint *vcounter, uint *tcounter,
 					uint *dpcounter, uint *cpcounter);
 
 /// Shuts the renderer down.
-void ac_renderer_shutdown(void);
+void r_shutdown(void);
 
 /// Sets new terrain heightmap.
-void ac_renderer_set_heightmap();
+void r_set_heightmap();
 
 /// Starts the rendering of the next frame. Also sts the point of view.
-/// \note				Must be called *before* \ref ac_renderer_finish3D
-void ac_renderer_start_scene(int time, ac_viewpoint_t *vp);
+/// \note				Must be called *before* \ref r_finish3D
+void r_start_scene(int time, ac_viewpoint_t *vp);
 
 /// Starts the FX rendering stage - calls the necessary state changes, etc.
-/// \sa ac_renderer_finish_fx
-/// \sa ac_renderer_draw_tracer
-void ac_renderer_start_fx(void);
+/// \sa r_finish_fx
+/// \sa r_draw_tracer
+void r_start_fx(void);
 
 /// Finishes the FX rendering stage - calls the necessary state changes, etc.
-/// \sa ac_renderer_start_fx
-/// \sa ac_renderer_draw_tracer
-void ac_renderer_finish_fx(void);
+/// \sa r_start_fx
+/// \sa r_draw_tracer
+void r_finish_fx(void);
 
 /// Draws a smoke particle at the given position with the given scale and alpha.
 /// \param pos			position of the smoke particle
 /// \param scale		scale of the particle
 /// \param alpha		alpha (transparency) value of the particle
 /// \param angle		angle by which to rotate the particle
-void ac_renderer_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
+void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 
 /// Draws a bullet tracer at the given position in the given direction.
-/// \note				Must be called *after* \ref ac_renderer_start_fx and
-///						*before* \ref ac_renderer_finish_fx
+/// \note				Must be called *after* \ref r_start_fx and
+///						*before* \ref r_finish_fx
 /// \param pos			position of the tracer
 /// \param dir			tracer's direction
 /// \param scale		scale of the tracer (length in metres, width in pixels)
-void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
+void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 
 /// Draws a string at the given normalized coordinates (in the [0..1] range) in
 /// the given scale. The text will be top-left-aligned. Newlines ('\n'
@@ -230,7 +241,7 @@ void ac_renderer_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
 /// \param ox			X coordinate of the text origin
 /// \param oy			Y coordinate of the text origin
 /// \param scale		scale of the text
-void ac_renderer_draw_string(char *str, float ox, float oy, float scale);
+void r_draw_string(char *str, float ox, float oy, float scale);
 
 /// Draws a set of line segments. Coordinates must be normalized (in the [0..1]
 /// range).
@@ -238,19 +249,19 @@ void ac_renderer_draw_string(char *str, float ox, float oy, float scale);
 ///						coordinates
 /// \param num_pts		number of points in the array
 /// \param width		desired width of the line segments in pixels
-void ac_renderer_draw_lines(float pts[][2], uint num_pts, float width);
+void r_draw_lines(float pts[][2], uint num_pts, float width);
 
 /// Finishes the 3D rendering stage - flushes the scene to the render target and
 /// switches to the 2D (HUD) stage.
-/// \note				Must be called *after* \ref ac_renderer_start_scene and
-///						*before* \ref ac_renderer_finish2D
-void ac_renderer_finish_3D(void);
+/// \note				Must be called *after* \ref r_start_scene and
+///						*before* \ref r_finish2D
+void r_finish_3D(void);
 
 /// Finishes the 2D rendering stage - flushes the 2D (HUD) elements to the
 /// render target.
-/// \note				Must be called *after* \ref ac_renderer_finish3D and
-///						*before* \ref ac_renderer_composite
-void ac_renderer_finish_2D(void);
+/// \note				Must be called *after* \ref r_finish3D and
+///						*before* \ref r_composite
+void r_finish_2D(void);
 
 /// Combines the 3D and 2D parts of the scene, runs post-processing effects and
 /// outputs the frame to screen.
@@ -258,39 +269,50 @@ void ac_renderer_finish_2D(void);
 ///						positive-negative transitions)
 /// \param contrast		fraction of contrast enhancement (for more prominent
 ///						M102 explosions)
-void ac_renderer_composite(float negative, float contrast);
+void r_composite(float negative, float contrast);
 
 // =========================================================
 // Game logic interface
 // =========================================================
 
-#define INPUT_NEGATIVE		0x01
-#define INPUT_MOUSE_LEFT	0x02
-#define INPUT_MOUSE_RIGHT	0x04
-#define INPUT_1				0x08
-#define INPUT_2				0x10
-#define INPUT_3				0x20
-#define INPUT_PAUSE			0x40
+/// Bitflags representing the states of different buttons and keys.
+typedef enum {
+/// player is holding the colour inversion toggle key
+	INPUT_NEGATIVE		= 0x01,
+/// player is holding the left mouse button
+	INPUT_MOUSE_LEFT	= 0x02,
+/// player is holding the right mouse button
+	INPUT_MOUSE_RIGHT	= 0x04,
+/// player is holding the 1 key
+	INPUT_1				= 0x08,
+/// player is holding the 2 key
+	INPUT_2				= 0x10,
+/// player is holding the 3 key
+	INPUT_3				= 0x20,
+/// player is holding the pause key
+	INPUT_PAUSE			= 0x40
+} ac_input_flags_t;
 
+/// Internal player input data structure.
 typedef struct {
-	int			flags;
-	short		deltaX, deltaY;
+	ac_input_flags_t	flags;			///< button and key state bitfield
+	short				deltaX, deltaY;	///< mouse motion deltas
 } ac_input_t;
 
 /// Initializes the game logic.
 /// \return true on success
-bool ac_game_init(void);
+bool g_init(void);
 
 /// Shuts the game logic down.
-void ac_game_shutdown(void);
+void g_shutdown(void);
 
 /// Advances the game world by one frame.
 /// \param ticks		number of ticks (milliseconds) since the start of game
 /// \param frameTime	time elapsed since last frame in seconds
 /// \param input		current state of player input
-void ac_game_frame(int ticks, float frameTime, ac_input_t *input);
+void g_frame(int ticks, float frameTime, ac_input_t *input);
 
-/// Updates the game loading screen. Only to be called before \ref ac_game_init
-void ac_game_loading_tick(void);
+/// Updates the game loading screen. Only to be called before \ref g_init
+void g_loading_tick(void);
 
 #endif // AC130_H

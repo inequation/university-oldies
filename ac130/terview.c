@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 	SDL_WM_SetCaption("Generating heightmap...", "Terrain viewer");
 	// load the heightmap into a surface
 	SDL_Surface *bmp = SDL_CreateRGBSurfaceFrom(
-		ac_gen_terrain(0xDEADBEEF), HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 8,
+		gen_terrain(0xDEADBEEF), HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 8,
 		HEIGHTMAP_SIZE, 0xFF, 0xFF, 0xFF, 0);
 	SDL_WM_SetCaption("Terrain viewer", "Terrain viewer");
 

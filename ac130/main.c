@@ -6,9 +6,9 @@
 #include <string.h>
 #include "ac130.h"
 
-int g_screenWidth = 1024;
-int g_screenHeight = 768;
-bool g_fullScreen = true;
+int m_screen_width = 1024;
+int m_screen_height = 768;
+bool m_full_screen = true;
 
 static void parse_args(int argc, char *argv[]) {
 	int i;
@@ -18,7 +18,7 @@ static void parse_args(int argc, char *argv[]) {
 
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-w")) {
-			g_fullScreen = false;
+			m_full_screen = false;
 			continue;
 		}
 		if (!strcmp(argv[i], "-r") && i + 1 < argc) {
@@ -30,22 +30,22 @@ static void parse_args(int argc, char *argv[]) {
 			if (x == NULL)
 				continue;
 			*x++ = 0;
-			g_screenWidth = atoi(buf);
-			g_screenHeight = atoi(x);
+			m_screen_width = atoi(buf);
+			m_screen_height = atoi(x);
 			// sanitize the values
-			if (g_screenWidth <= 0)
-				g_screenWidth = 1024;
-			if (g_screenHeight <= 0)
-				g_screenHeight = 768;
+			if (m_screen_width <= 0)
+				m_screen_width = 1024;
+			if (m_screen_height <= 0)
+				m_screen_height = 768;
 			// enforce a 4:3 or 5:4 aspect ratio
-			aspect = (float)g_screenWidth / (float)g_screenHeight;
+			aspect = (float)m_screen_width / (float)m_screen_height;
 			if (fabs(aspect - 4.f / 3.f) > 0.01
 				&& fabs(aspect - 5.f / 4.f) > 0.01) {
 				// OK, this aspect isn't right, shrink the window to get 4:3
 				if (aspect > 1.334)
-					g_screenWidth = 1.33 * g_screenHeight;
+					m_screen_width = 1.33 * m_screen_height;
 				else
-					g_screenHeight = 0.75 * g_screenWidth;
+					m_screen_height = 0.75 * m_screen_width;
 			}
 		}
 	}
@@ -75,7 +75,7 @@ int main (int argc, char *argv[]) {
 	}
 
 	// initialize renderer
-	if (!ac_renderer_init(&vertCount, &triCount, &dpCount, &cpCount)) {
+	if (!r_init(&vertCount, &triCount, &dpCount, &cpCount)) {
 		fprintf(stderr, "Unable to init renderer\n");
 		return 1;
 	}
@@ -90,7 +90,7 @@ int main (int argc, char *argv[]) {
 	bool grab = true;
 	SDL_WM_GrabInput(SDL_GRAB_ON);
 #else
-	bool grab = g_fullScreen;
+	bool grab = m_full_screen;
 	SDL_WM_GrabInput(grab ? SDL_GRAB_ON : SDL_GRAB_OFF);
 #endif // NDEBUG
 
@@ -102,7 +102,7 @@ int main (int argc, char *argv[]) {
 	memset(&curInput, 0, sizeof(curInput));
 
 	// initialize game logic
-	ac_game_init();
+	g_init();
 
 	// update window caption to say that we're done generating stuff
 	SDL_WM_SetCaption("AC-130", "AC-130");
@@ -208,7 +208,7 @@ int main (int argc, char *argv[]) {
 			frameCount = triCount = vertCount = dpCount = cpCount = 0;
 		}
 
-		ac_game_frame(curTime, frameTime, &curInput);
+		g_frame(curTime, frameTime, &curInput);
 		prevInput = curInput;
 		frameCount++;
 
@@ -223,8 +223,8 @@ int main (int argc, char *argv[]) {
 	SDL_WM_GrabInput(SDL_GRAB_OFF);
 
 	// shut all subsystems down
-	ac_renderer_shutdown();
-	ac_game_shutdown();
+	r_shutdown();
+	g_shutdown();
 
 	return 0;
 }

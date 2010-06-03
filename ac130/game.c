@@ -85,18 +85,18 @@ float			g_neg_time = 0.f;
 #define EXPLOSION_TIME		2.0
 float			g_expl_time = -EXPLOSION_TIME;
 
-bool ac_game_init(void) {
+bool g_init(void) {
 	// set new terrain heightmap
-	ac_gen_terrain(0xDEADBEEF);
-	ac_renderer_set_heightmap();
+	gen_terrain(0xDEADF00D);
+	r_set_heightmap();
 
 	// generate proplists
 	g_trees = malloc(sizeof(*g_trees) * MAX_NUM_TREES);
-	g_bldgs = malloc(sizeof(*g_bldgs) * MAX_NUM_TREES);
-	ac_gen_proplists(&g_num_trees, g_trees, &g_num_bldgs, g_bldgs);
+	g_bldgs = malloc(sizeof(*g_bldgs) * MAX_NUM_BLDGS);
+	gen_proplists(&g_num_trees, g_trees, &g_num_bldgs, g_bldgs);
 
 	// final tick before game is ready
-	ac_game_loading_tick();
+	g_loading_tick();
 
 	g_gravity = ac_vec_set(0, -9.81, 0, 0);
 
@@ -108,12 +108,12 @@ bool ac_game_init(void) {
 	return true;
 }
 
-void ac_game_shutdown(void) {
+void g_shutdown(void) {
 	free(g_trees);
 	free(g_bldgs);
 }
 
-float ac_game_sample_height(float x, float y) {
+float g_sample_height(float x, float y) {
 	// bilinear filtering
 	float xi, yi, xfrac, yfrac;
 	float fR1, fR2;
@@ -122,14 +122,14 @@ float ac_game_sample_height(float x, float y) {
 	yfrac = modff(y, &yi);
 
 	// bilinear filtering
-	fR1 = (1.f - xfrac) * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
-		+ xfrac * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
-	fR2 = (1.f - xfrac) * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi]
-		+ xfrac * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
+	fR1 = (1.f - xfrac) * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
+		+ xfrac * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
+	fR2 = (1.f - xfrac) * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE +(int)xi]
+		+ xfrac * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
 	return ((1.f - yfrac) * fR1 + yfrac * fR2) * HEIGHT_SCALE;
 }
 
-ac_vec4_t ac_game_collide(ac_vec4_t p1, ac_vec4_t p2) {
+ac_vec4_t g_collide(ac_vec4_t p1, ac_vec4_t p2) {
 	ac_vec4_t half = ac_vec_setall(0.5);
 	ac_vec4_t v = ac_vec_sub(p2, p1);
 	ac_vec4_t p;
@@ -139,7 +139,7 @@ ac_vec4_t ac_game_collide(ac_vec4_t p1, ac_vec4_t p2) {
 	for (i = 0; i < 4; i++) {
 		v = ac_vec_mul(v, half);
 		p = ac_vec_add(p1, v);
-		h = ac_game_sample_height(p.f[0], p.f[2]);
+		h = g_sample_height(p.f[0], p.f[2]);
 		if (fabs(p.f[1] - h) < 0.1)
 			break;
 		if (p.f[1] < h)
@@ -151,7 +151,7 @@ ac_vec4_t ac_game_collide(ac_vec4_t p1, ac_vec4_t p2) {
 	return p;
 }
 
-int ac_game_particle_cmp(const void *p1, const void *p2) {
+int g_particle_cmp(const void *p1, const void *p2) {
 	float diff;
 	// push inactive particles towards the end of the array
 	if (((particle_t *)p1)->weap == WP_NONE)
@@ -171,7 +171,7 @@ int ac_game_particle_cmp(const void *p1, const void *p2) {
 }
 
 #define USE_QSORT
-void ac_game_advance_particles(void) {
+void g_advance_particles(void) {
 	int i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t tmp;
@@ -181,7 +181,7 @@ void ac_game_advance_particles(void) {
 	// we need the proper Z-order, so sort the particle array first
 #ifdef USE_QSORT
 	qsort(g_particles, sizeof(g_particles) / sizeof(g_particles[0]),
-		sizeof(g_particles[0]), ac_game_particle_cmp);
+		sizeof(g_particles[0]), g_particle_cmp);
 #endif
 
 	for (i = 0, p = g_particles;
@@ -289,11 +289,11 @@ void ac_game_advance_particles(void) {
 		tmp = ac_vec_mulf(grav, g);
 		p->vel = ac_vec_add(p->vel, tmp);
 		// draw the particle
-		ac_renderer_draw_fx(p->pos, p->scale, p->alpha, p->angle);
+		r_draw_fx(p->pos, p->scale, p->alpha, p->angle);
 	}
 }
 
-void ac_game_explode(ac_vec4_t pos, weap_t w) {
+void g_explode(ac_vec4_t pos, weap_t w) {
 	int i, j;
 	particle_t *p;
 	ac_vec4_t dir;
@@ -394,7 +394,7 @@ void ac_game_explode(ac_vec4_t pos, weap_t w) {
 	}
 }
 
-void ac_game_advance_projectiles(void) {
+void g_advance_projectiles(void) {
 	int i;
 	ac_vec4_t grav = ac_vec_mul(g_gravity, g_frameTimeVec);
 	ac_vec4_t npos, ip;
@@ -417,26 +417,26 @@ void ac_game_advance_projectiles(void) {
 			continue;
 		}
 		// terrain collision detection
-		h = ac_game_sample_height(npos.f[0], npos.f[2]);
+		h = g_sample_height(npos.f[0], npos.f[2]);
 		if (npos.f[1] < h) {
 			// find the impact point
-			ip = ac_game_collide(ac_vec_add(ofs, g_projs[i].pos), npos);
+			ip = g_collide(ac_vec_add(ofs, g_projs[i].pos), npos);
 			//printf("HIT! %f %f %f\n", ip.f[0], ip.f[1], ip.f[2]);
-			ac_game_explode(ac_vec_sub(ip, ofs), g_projs[i].weap);
+			g_explode(ac_vec_sub(ip, ofs), g_projs[i].weap);
 			g_projs[i].weap = WP_NONE;
 		}
 		g_projs[i].pos = ac_vec_sub(npos, ofs);
 		// draw tracers
 		switch (g_projs[i].weap) {
 			case WP_M61_TRACER:
-				ac_renderer_draw_tracer(g_projs[i].pos,
+				r_draw_tracer(g_projs[i].pos,
 					ac_vec_normalize(g_projs[i].vel), 3.f);
 			case WP_M61:	// intentional fall-through!
 				// add full gravity
 				g_projs[i].vel = ac_vec_add(g_projs[i].vel, grav);
 				break;
 			case WP_L60:
-				ac_renderer_draw_tracer(g_projs[i].pos,
+				r_draw_tracer(g_projs[i].pos,
 					ac_vec_normalize(g_projs[i].vel), 5.f);
 				// add reduced gravity
 				g_projs[i].vel = ac_vec_add(g_projs[i].vel,
@@ -453,7 +453,7 @@ void ac_game_advance_projectiles(void) {
 	}
 }
 
-void ac_game_fire_weapon(weap_t w) {
+void g_fire_weapon(weap_t w) {
 	int i;
 	static int m61 = 0;
 	//printf("FIRE! %d\n", (int)w);
@@ -487,7 +487,7 @@ void ac_game_fire_weapon(weap_t w) {
 	}
 }
 
-void ac_game_player_think(ac_input_t *in) {
+void g_player_think(ac_input_t *in) {
 	// times since last shots
 	static float m61 = WEAP_FIREDELAY_M61;
 	static float l60 = WEAP_FIREDELAY_L60;
@@ -515,26 +515,26 @@ void ac_game_player_think(ac_input_t *in) {
 					{
 						float ft = g_frameTime;
 						while (ft >= WEAP_FIREDELAY_M61) {
-							ac_game_fire_weapon(g_weapon);
+							g_fire_weapon(g_weapon);
 							ft -= WEAP_FIREDELAY_M61;
 						}
 						m61 += ft;
 						if (m61 >= WEAP_FIREDELAY_M61) {
 							m61 = 0;
-							ac_game_fire_weapon(g_weapon);
+							g_fire_weapon(g_weapon);
 						}
 					}
 					break;
 				case WP_L60:
 					if (l60 >= WEAP_FIREDELAY_L60) {
 						l60 = 0;
-						ac_game_fire_weapon(g_weapon);
+						g_fire_weapon(g_weapon);
 					}
 					break;
 				case WP_M102:
 					if (m102 >= WEAP_FIREDELAY_M102) {
 						m102 = 0;
-						ac_game_fire_weapon(g_weapon);
+						g_fire_weapon(g_weapon);
 					}
 					break;
 				default:
@@ -661,7 +661,7 @@ static const float g_reticle_M61[][2] = {
 	{0.67, 0.67},	{0.63, 0.67}
 };
 
-void ac_game_drawHUD(float neg) {
+void g_drawHUD(float neg) {
 	char buf[64];
 	ac_vec4_t p1, p2;
 
@@ -669,24 +669,24 @@ void ac_game_drawHUD(float neg) {
 	// different weapons have different reticles
 	switch (g_weapon) {
 		case WP_M61:
-			ac_renderer_draw_lines((float (*)[2])g_reticle_M61,
+			r_draw_lines((float (*)[2])g_reticle_M61,
 				sizeof(g_reticle_M61) / sizeof(g_reticle_M61[0]), 3.f);
-			ac_renderer_draw_string("25mm", 0, 0.9, 0.6);
+			r_draw_string("25mm", 0, 0.9, 0.6);
 			break;
 		case WP_L60:
-			ac_renderer_draw_lines((float (*)[2])g_reticle_L60,
+			r_draw_lines((float (*)[2])g_reticle_L60,
 				sizeof(g_reticle_L60) / sizeof(g_reticle_L60[0]), 3.f);
-			ac_renderer_draw_string("40mm", 0, 0.9, 0.6);
+			r_draw_string("40mm", 0, 0.9, 0.6);
 			break;
 		case WP_M102:
-			ac_renderer_draw_lines((float (*)[2])g_reticle_M102,
+			r_draw_lines((float (*)[2])g_reticle_M102,
 				sizeof(g_reticle_M102) / sizeof(g_reticle_M102[0]), 3.f);
-			ac_renderer_draw_string("105mm", 0, 0.9, 0.6);
+			r_draw_string("105mm", 0, 0.9, 0.6);
 			break;
 		default:	// shut up compiler
 			break;
 	}
-	ac_renderer_draw_string("\n"
+	r_draw_string("\n"
 		"0    A-G   MAN NARO\n"
 		"RAY\n"
 		"FF 30\n"
@@ -699,7 +699,7 @@ void ac_game_drawHUD(float neg) {
 	p1 = ac_vec_add(g_viewpoint.origin,
 		ac_vec_set(HEIGHTMAP_SIZE / 2, 0, HEIGHTMAP_SIZE / 2, 0));
 	p2 = ac_vec_ma(g_forward, ac_vec_setall(800), p1);
-	p2 = ac_game_collide(p1, p2);
+	p2 = g_collide(p1, p2);
 	p1 = ac_vec_sub(p2, p1);
 	sprintf(buf, "T\n"
 		"G\n"
@@ -714,12 +714,12 @@ void ac_game_drawHUD(float neg) {
 		"%s N\n"
 		"SCORE %08d TARG DIST %-4.0f",
 		neg > 0.5 ? "BHOT" : "WHOT", 0, ac_vec_length(p1));
-	ac_renderer_draw_string(buf, -1, 0, 0.6);
+	r_draw_string(buf, -1, 0, 0.6);
 }
 
-void ac_game_draw_instructions(void) {
-	ac_renderer_draw_string("CONTROLS:\n", 0.02, 0.02, 1.f);
-	ac_renderer_draw_string("Mouse:              Aim\n"
+void g_draw_instructions(void) {
+	r_draw_string("CONTROLS:\n", 0.02, 0.02, 1.f);
+	r_draw_string("Mouse:              Aim\n"
 		"Left mouse button:  Fire\n"
 		"Right mouse button: Toggle weapons\n"
 		"1, 2, 3:            Weapon selection\n"
@@ -727,8 +727,8 @@ void ac_game_draw_instructions(void) {
 		"                    hot vision\n"
 		"P:                  Pause game\n"
 		"Esc:                Quit game", 0.02, 0.1, 0.55);
-	ac_renderer_draw_string("OBJECTIVE:\n", 0.02, 0.48, 1.f);
-	ac_renderer_draw_string("Somewhere in the world, war rages. You are\n"
+	r_draw_string("OBJECTIVE:\n", 0.02, 0.48, 1.f);
+	r_draw_string("Somewhere in the world, war rages. You are\n"
 		"a TV operator aboard an AC-130 gunship.\n"
 		"Your mission is to provide fire support\n"
 		"for friendly troops on the ground. Beware\n"
@@ -737,7 +737,7 @@ void ac_game_draw_instructions(void) {
 }
 
 #define TOTAL_TICKS	6410.f
-void ac_game_loading_tick() {
+void g_loading_tick() {
 	static char buf[32];
 	static float pts[][2] = {
 		{0.25, 0.97}, {0.25, 0.97}
@@ -747,29 +747,29 @@ void ac_game_loading_tick() {
 	// don't need update the screen every damn tick
 	if (counter % 100 != 1)
 		return;
-	ac_renderer_start_scene(0, NULL);
-	ac_renderer_finish_fx();
-	ac_renderer_finish_3D();
+	r_start_scene(0, NULL);
+	r_finish_fx();
+	r_finish_3D();
 
 	// draw the instructions
-	ac_game_draw_instructions();
+	g_draw_instructions();
 	// draw the progress bar
 	pts[1][0] = 0.25 + 0.5 * (float)counter / TOTAL_TICKS;
-	ac_renderer_draw_lines(pts, 2, 12.f);
+	r_draw_lines(pts, 2, 12.f);
 	// draw percentage
 	sprintf(buf, "LOADING - %.0f%%", (float)counter / TOTAL_TICKS * 100.f);
-	ac_renderer_draw_string(buf, 0.25, 0.87, 1.0);
-	ac_renderer_draw_string("(C) 2010, Leszek Godlewski - www.inequation.org",
+	r_draw_string(buf, 0.25, 0.87, 1.0);
+	r_draw_string("(C) 2010, Leszek Godlewski - www.inequation.org",
 		-0.995, 0.005, 0.3);
 
-	ac_renderer_finish_2D();
-	ac_renderer_composite(0.f, 0.f);
+	r_finish_2D();
+	r_composite(0.f, 0.f);
 }
 
 #define FLOATING_RADIUS		200.f
 #define TIME_SCALE			-0.04
 #define MOUSE_SCALE			0.001
-void ac_game_viewpoint_think(ac_input_t *input) {
+void g_viewpoint_think(ac_input_t *input) {
 	float plane_angle = g_time * TIME_SCALE;
 	float fy, fp;
 	ac_vec4_t tmp;
@@ -829,7 +829,7 @@ void ac_game_viewpoint_think(ac_input_t *input) {
 		-cosf(fp) * sinf(fy), sinf(fp), -cosf(fp) * cosf(fy), 0);
 }
 
-void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
+void g_frame(int ticks, float frameTime, ac_input_t *input) {
 	static int gameTicks = 0;
 	static int lastTicks = 0;
 	static float neg = 0.f;
@@ -866,10 +866,10 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		expld = 0.f;
 
 	// advance the viewpoint
-	ac_game_viewpoint_think(input);
+	g_viewpoint_think(input);
 
 	// operate the weapons
-	ac_game_player_think(input);
+	g_player_think(input);
 
 	// generate another viewpoint for gun shakes
 	if (g_time - g_shake_time <= SHAKE_TIME) {
@@ -877,30 +877,30 @@ void ac_game_frame(int ticks, float frameTime, ac_input_t *input) {
 		memcpy(&vp, &g_viewpoint, sizeof(vp));
 		vp.angles[0] += (-0.018 + 0.000036 * (rand() % 1001)) * lerp;
 		vp.angles[1] += (-0.018 + 0.000036 * (rand() % 1001)) * lerp;
-		ac_renderer_start_scene(gameTicks, &vp);
+		r_start_scene(gameTicks, &vp);
 	} else
-		ac_renderer_start_scene(gameTicks, &g_viewpoint);
+		r_start_scene(gameTicks, &g_viewpoint);
 
 	// advance the non-player elements of the world
-	ac_game_advance_projectiles();
-	ac_renderer_start_fx();
-	ac_game_advance_particles();
-	ac_renderer_finish_fx();
+	g_advance_projectiles();
+	r_start_fx();
+	g_advance_particles();
+	r_finish_fx();
 
-	ac_renderer_finish_3D();
+	r_finish_3D();
 	if (!g_paused)
-		ac_game_drawHUD(neg);
+		g_drawHUD(neg);
 	else {
-		ac_game_draw_instructions();
+		g_draw_instructions();
 		if (gameTicks == 0) {
-			ac_renderer_draw_string("PRESS FIRE TO START", 0.125, 0.87,
+			r_draw_string("PRESS FIRE TO START", 0.125, 0.87,
 				1.0);
 			if (input->flags & INPUT_MOUSE_LEFT)
 				g_paused = false;
 		} else
-			ac_renderer_draw_string("GAME PAUSED", 0.27, 0.87, 1.0);
+			r_draw_string("GAME PAUSED", 0.27, 0.87, 1.0);
 	}
-	ac_renderer_finish_2D();
+	r_finish_2D();
 
-	ac_renderer_composite(neg, expld);
+	r_composite(neg, expld);
 }

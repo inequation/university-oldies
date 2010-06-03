@@ -5,17 +5,18 @@
 
 #include "ac130.h"
 
-ac_prop_t		*g_proptree = NULL;
+uchar			gen_heightmap[HEIGHTMAP_SIZE * HEIGHTMAP_SIZE];
+ac_prop_t		*gen_proptree = NULL;
 
 /// Seed for the internal pseudorandom number generator.
-static uint		g_seed;
+static uint		gen_seed = 0;
 
 /// Internal pseudorandom number generator.
-int ac_gen_rand(void) {
-	g_seed = (16807LL * (g_seed + 1)) % 2147483647;
-	if (g_seed < 0)
-		g_seed += 2147483647;
-	return g_seed - 1;
+int gen_rand(void) {
+	gen_seed = (16807LL * (gen_seed + 1)) % 2147483647;
+	if (gen_seed < 0)
+		gen_seed += 2147483647;
+	return (gen_seed - 1);
 }
 
 /// Perlin noise permutation table.
@@ -44,7 +45,7 @@ static inline float grad(int hash, float x, float y, float z) {
 }
 
 /// Improved perlin noise generator.
-static float ac_gen_perlin(float x, float y, float z) {
+static float gen_perlin(float x, float y, float z) {
 	int X, Y, Z;
 	int A, AA, AB, B, BA, BB;
 	float u, v, w;
@@ -80,13 +81,13 @@ static float ac_gen_perlin(float x, float y, float z) {
 #undef fade
 #undef lerp
 
-static void ac_gen_cloudmap(char *dst, int size) {
+static void gen_cloudmap(char *dst, int size) {
 	int i, x, y, xoff, yoff, pix;
 	char *submaps[3];
 	char *c;
 	float freq;
 
-	freq = 0.015 + 0.000001 * (float)((ac_gen_rand() % 10000) - 5000);
+	freq = 0.015 + 0.000001 * (float)((gen_rand() % 10000) - 5000);
 
 	for (x = 0; x < sizeof(submaps) / sizeof(submaps[0]); x++)
 		submaps[x] = malloc(size * size);
@@ -97,16 +98,16 @@ static void ac_gen_cloudmap(char *dst, int size) {
 		i++, freq *= 2.0) {
 		if (i > 0)
 			c = submaps[i - 1];
-		xoff = ac_gen_rand() % (size * 2);
-		yoff = ac_gen_rand() % (size * 2);
+		xoff = gen_rand() % (size * 2);
+		yoff = gen_rand() % (size * 2);
 		for (y = 0; y < size; y++) {
 			for (x = 0; x < size; x++)
 				c[y * size + x] = (char)(127.f
-					* ac_gen_perlin(
+					* gen_perlin(
 						(float)(x + xoff) * freq,
 						(float)(y + yoff) * freq,
 						sqrtf((x + xoff) * (y + yoff)) * freq));
-			ac_game_loading_tick();
+			g_loading_tick();
 		}
 	}
 
@@ -125,34 +126,33 @@ static void ac_gen_cloudmap(char *dst, int size) {
 				dst[y * size + x] = (char)pix;
 			}
 		}
-		ac_game_loading_tick();
+		g_loading_tick();
 	}
 
 	for (x = 0; x < sizeof(submaps) / sizeof(submaps[0]); x++)
 		free(submaps[x]);
 }
 
-uchar			g_heightmap[HEIGHTMAP_SIZE * HEIGHTMAP_SIZE];
-
-void ac_gen_terrain(int seed) {
+void gen_terrain(int seed) {
 	int x, y, xoff, yoff, pix;
-	char *cloudmap = malloc(sizeof(g_heightmap));
-	float freq = 0.005 + 0.000001 * (float)((ac_gen_rand() % 6000) - 3000);
+	char *cloudmap = malloc(sizeof(gen_heightmap));
+	float freq;
 
-	g_seed = seed;
-	xoff = ac_gen_rand() % (HEIGHTMAP_SIZE);
-	yoff = ac_gen_rand() % (HEIGHTMAP_SIZE);
+	gen_seed = seed;
+	freq = 0.005 + 0.000001 * (float)((gen_rand() % 6000) - 3000);
+	xoff = gen_rand() % (HEIGHTMAP_SIZE);
+	yoff = gen_rand() % (HEIGHTMAP_SIZE);
 
-	memset(g_heightmap, 127, sizeof(g_heightmap));
+	memset(gen_heightmap, 127, sizeof(gen_heightmap));
 
-	ac_gen_cloudmap(cloudmap, HEIGHTMAP_SIZE);
+	gen_cloudmap(cloudmap, HEIGHTMAP_SIZE);
 
 	for (y = 0; y < HEIGHTMAP_SIZE; y++) {
 		for (x = 0; x < HEIGHTMAP_SIZE; x++) {
 #if 1
 			// pass 1 - rough topography
-			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(127.f
-				* ac_gen_perlin(
+			((char *)gen_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(127.f
+				* gen_perlin(
 					(float)(x + xoff) * freq,
 					(float)(y + yoff) * freq,
 					sqrtf((x + xoff) * (y + yoff)) * freq));
@@ -160,30 +160,30 @@ void ac_gen_terrain(int seed) {
 #if 0
 			// pass 2 - detail
 			freq *= 1.00002;
-			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(127.f
-				* ac_gen_perlin(
+			((char *)gen_heightmap)[y * HEIGHTMAP_SIZE + x] += (char)(127.f
+				* gen_perlin(
 					(float)(x + xoff) * freq,
 					(float)(y + yoff) * freq,
 					sqrtf((x + xoff) * (y + yoff)) * freq));
 #endif
 #if 1
 			// pass 3 - cloud detail
-			pix = (int)(g_heightmap[y * HEIGHTMAP_SIZE + x]) +
+			pix = (int)(gen_heightmap[y * HEIGHTMAP_SIZE + x]) +
 				(int)(cloudmap[y * HEIGHTMAP_SIZE + x] / 2);
 			if (pix < 0)
 				pix = 0;
 			else if (pix > 255)
 				pix = 255;
-			((char *)g_heightmap)[y * HEIGHTMAP_SIZE + x] = pix;
+			((char *)gen_heightmap)[y * HEIGHTMAP_SIZE + x] = pix;
 #endif
 		}
-		ac_game_loading_tick();
+		g_loading_tick();
 	}
 
 	free(cloudmap);
 }
 
-static float ac_gen_sample_height(float x, float y) {
+static float gen_sample_height(float x, float y) {
 #if 1
 	// bilinear filtering
 	float xi, yi, xfrac, yfrac;
@@ -193,19 +193,19 @@ static float ac_gen_sample_height(float x, float y) {
 	yfrac = modff(y, &yi);
 
 	// bilinear filtering
-	fR1 = (1.f - xfrac) * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
-		+ xfrac * g_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
-	fR2 = (1.f - xfrac) * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi]
-		+ xfrac * g_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
+	fR1 = (1.f - xfrac) * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
+		+ xfrac * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
+	fR2 = (1.f - xfrac) * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi]
+		+ xfrac * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
 	return ((1.f - yfrac) * fR1 + yfrac * fR2) * HEIGHT_SCALE;
 #else
 	// nearest filtering
-	return g_heightmap[(int)roundf(y) * HEIGHTMAP_SIZE + (int)roundf(x)]
+	return gen_heightmap[(int)roundf(y) * HEIGHTMAP_SIZE + (int)roundf(x)]
 		* HEIGHT_SCALE;
 #endif
 }
 
-void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
+void gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	int i, l, base, vofs, iofs;
 	const float invScale = 1.f / (PROP_TEXTURE_SIZE - 1);
 	float rpi;
@@ -243,7 +243,7 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 		}*/
 	}
 
-	ac_game_loading_tick();
+	g_loading_tick();
 
 	// buildings
 
@@ -340,7 +340,7 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	// building wall
 	for (l = 3; l < PROP_TEXTURE_SIZE; l++) {
 		for (i = 0; i < PROP_TEXTURE_SIZE; i++)
-			texture[PROP_TEXTURE_SIZE * l + i] = 96 + ac_gen_rand() % 32;
+			texture[PROP_TEXTURE_SIZE * l + i] = 96 + gen_rand() % 32;
 	}
 	// window
 	for (l = 0; l < 9; l++) {
@@ -352,14 +352,14 @@ void ac_gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 		}
 	}
 
-	ac_game_loading_tick();
+	g_loading_tick();
 }
 
-static inline float ac_gen_smoothstep(float t) {
+static inline float gen_smoothstep(float t) {
 	return t * t * (3 - 2 * t);
 }
 
-void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
+void gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 	int i, j;
 	float d, x, y, z, f, perlin;
 	const float r = (FX_TEXTURE_SIZE - 1) * 0.5;
@@ -386,7 +386,7 @@ void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 			// this won't give us an exact sphere, but it's close enough
 			z = -sinf(acosf(x * y * invr2));
 			d = sqrtf(x * x + y * y);
-			perlin = ac_gen_perlin(x * invr * 4, y * invr * 4, z * invr * 4);
+			perlin = gen_perlin(x * invr * 4, y * invr * 4, z * invr * 4);
 			texture[(i * FX_TEXTURE_SIZE + j) * 2 + 0] = 225 + perlin * 30;
 			if (d <= r - 80.f)
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 255;
@@ -394,17 +394,17 @@ void ac_gen_fx(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 				f = (r - d) / 80.f;
 				perlin = (perlin + 1.f) * 0.5;
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] =
-					ac_gen_smoothstep(f) * 255 * (f + perlin * (1 - f));
+					gen_smoothstep(f) * 255 * (f + perlin * (1 - f));
 			} else
 				texture[(i * FX_TEXTURE_SIZE + j) * 2 + 1] = 0;
 		}
-		ac_game_loading_tick();
+		g_loading_tick();
 	}
 }
 
-static uchar	*g_propmap;
+static uchar	*gen_propmap;
 
-static void ac_gen_propmap_populate(int x, int y, int *counter, int *trace,
+static void gen_propmap_populate(int x, int y, int *counter, int *trace,
 									uchar value) {
 	int k;
 
@@ -413,33 +413,33 @@ static void ac_gen_propmap_populate(int x, int y, int *counter, int *trace,
 	if (!(*trace) || !(*counter))
 		return;
 	k = y * PROPMAP_SIZE + x;
-	if (g_propmap[k] != 0)
+	if (gen_propmap[k] != 0)
 		return;
-	g_propmap[k] = value;
+	gen_propmap[k] = value;
 	(*trace)--;
 	(*counter)--;
 	if (!(*trace) || !(*counter))
 		return;
 	// try to recurse in one of the directions with a 33% chance
 	if (rand() % 100 > 33)
-		ac_gen_propmap_populate(x + 1, y, counter, trace, value);
+		gen_propmap_populate(x + 1, y, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x + 1, y + 1, counter, trace, value);
+		gen_propmap_populate(x + 1, y + 1, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x, y + 1, counter, trace, value);
+		gen_propmap_populate(x, y + 1, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x - 1, y + 1, counter, trace, value);
+		gen_propmap_populate(x - 1, y + 1, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x - 1, y, counter, trace, value);
+		gen_propmap_populate(x - 1, y, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x - 1, y - 1, counter, trace, value);
+		gen_propmap_populate(x - 1, y - 1, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x, y - 1, counter, trace, value);
+		gen_propmap_populate(x, y - 1, counter, trace, value);
 	if (*counter && rand() % 100 > 33)
-		ac_gen_propmap_populate(x + 1, y - 1, counter, trace, value);
+		gen_propmap_populate(x + 1, y - 1, counter, trace, value);
 }
 
-static void ac_gen_propmap(void) {
+static void gen_create_propmap(void) {
 	const int numFields = PROPMAP_SIZE * PROPMAP_SIZE;
 	int treeFields = TREE_COVERAGE * numFields;
 	int bldgFields = BLDG_COVERAGE * numFields;
@@ -447,25 +447,25 @@ static void ac_gen_propmap(void) {
 	int trace;
 
 	while (treeFields) {
-		trace = 1 + ac_gen_rand() % 10;
-		ac_gen_propmap_populate(ac_gen_rand() % PROPMAP_SIZE,
-								ac_gen_rand() % PROPMAP_SIZE,
+		trace = 1 + gen_rand() % 10;
+		gen_propmap_populate(gen_rand() % PROPMAP_SIZE,
+								gen_rand() % PROPMAP_SIZE,
 								&treeFields, &trace, 1);
 	}
 
-	ac_game_loading_tick();
+	g_loading_tick();
 
 	while (bldgFields) {
-		trace = 1 + ac_gen_rand() % 4;
-		ac_gen_propmap_populate(ac_gen_rand() % PROPMAP_SIZE,
-								ac_gen_rand() % PROPMAP_SIZE,
+		trace = 1 + gen_rand() % 4;
+		gen_propmap_populate(gen_rand() % PROPMAP_SIZE,
+								gen_rand() % PROPMAP_SIZE,
 								&bldgFields, &trace, 2);
 	}
 
-	ac_game_loading_tick();
+	g_loading_tick();
 }
 
-static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
+static ac_prop_t *gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs, int x, int y, int step) {
 	int i;
 	float tx, tz, min, max;
@@ -478,29 +478,29 @@ static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 
 	if (step < 1) {
 		float h;
-		switch (g_propmap[y * PROPMAP_SIZE + x]) {
+		switch (gen_propmap[y * PROPMAP_SIZE + x]) {
 			case 0:
 				break;
 			case 1:	// tree node
 				node->trees = &trees[*numTrees];
 				//node->bldgs = NULL;
 				for (i = 0; i < TREES_PER_FIELD; i++) {
-					tx = (x << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+					tx = (x << PROPMAP_SHIFT) + 0.01 * (gen_rand()
 						% ((1 << PROPMAP_SHIFT) * 100));
-					tz = (y << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+					tz = (y << PROPMAP_SHIFT) + 0.01 * (gen_rand()
 						% ((1 << PROPMAP_SHIFT) * 100));
-					h = ac_gen_sample_height(tx, tz);
+					h = gen_sample_height(tx, tz);
 					trees[i + *numTrees].pos = ac_vec_set(
 						tx - HEIGHTMAP_SIZE * 0.5,
 						h,
 						tz - HEIGHTMAP_SIZE * 0.5,
 						1.f);
 					trees[i + *numTrees].ang =
-						(ac_gen_rand() % 360) / 180.f * M_PI;
+						(gen_rand() % 360) / 180.f * M_PI;
 					trees[i + *numTrees].XZscale =
-						1.0 + 0.001 * (ac_gen_rand() % 1201);
+						1.0 + 0.001 * (gen_rand() % 1201);
 					trees[i + *numTrees].Yscale =
-						2.4 + 0.001 * (ac_gen_rand() % 3201);
+						2.4 + 0.001 * (gen_rand() % 3201);
 					if (h - 0.1 < min)
 						min = h - 0.1;
 					else if (h + trees[i + *numTrees].Yscale > max)
@@ -512,27 +512,27 @@ static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 				//node->trees = NULL;
 				node->bldgs = &bldgs[*numBldgs];
 				for (i = 0; i < BLDGS_PER_FIELD; i++) {
-					tx = (x << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+					tx = (x << PROPMAP_SHIFT) + 0.01 * (gen_rand()
 						% ((1 << PROPMAP_SHIFT) * 100));
-					tz = (y << PROPMAP_SHIFT) + 0.01 * (ac_gen_rand()
+					tz = (y << PROPMAP_SHIFT) + 0.01 * (gen_rand()
 						% ((1 << PROPMAP_SHIFT) * 100));
-					h = ac_gen_sample_height(tx, tz);
+					h = gen_sample_height(tx, tz);
 					bldgs[i + *numBldgs].pos = ac_vec_set(
 						tx - HEIGHTMAP_SIZE * 0.5,
 						h,
 						tz - HEIGHTMAP_SIZE * 0.5,
 						1.f);
 					bldgs[i + *numBldgs].ang =
-						((ac_gen_rand() % 4) * 90 - 10 + ac_gen_rand() % 21)
+						((gen_rand() % 4) * 90 - 10 + gen_rand() % 21)
 							/ 180.f * M_PI;
 					bldgs[i + *numBldgs].Xscale =
-						6 + 0.001 * (ac_gen_rand() % 2001);
+						5 + 0.001 * (gen_rand() % 2001);
 					bldgs[i + *numBldgs].Zscale =
-						8 + 0.001 * (ac_gen_rand() % 3001);
+						7 + 0.001 * (gen_rand() % 3001);
 					bldgs[i + *numBldgs].Yscale =
-						2.8 + 0.001 * (ac_gen_rand() % 3001);
+						2.8 + 0.001 * (gen_rand() % 3001);
 					bldgs[i + *numBldgs].slantedRoof =
-						ac_gen_rand() % 100 >= 33;
+						gen_rand() % 100 >= 33;
 					if (h - 1 < min)
 						min = h - 1;
 					/*else if (h + bldgs[i + *numBldgs].Yscale > max)
@@ -544,13 +544,13 @@ static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 				break;
 		}
 	} else {
-		node->child[0] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		node->child[0] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x, y, step / 2);
-		node->child[1] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		node->child[1] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x + step, y, step / 2);
-		node->child[2] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		node->child[2] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x, y + step, step / 2);
-		node->child[3] = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		node->child[3] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x + step, y + step, step / 2);
 		min = MIN(node->child[0]->bounds[0].f[1],
 			MIN(node->child[1]->bounds[0].f[1],
@@ -574,36 +574,36 @@ static ac_prop_t *ac_gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 	return node;
 }
 
-void ac_gen_proplists(int *numTrees, ac_tree_t *trees,
+void gen_proplists(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs) {
-	g_propmap = malloc(sizeof(*g_propmap) * PROPMAP_SIZE * PROPMAP_SIZE);
-	memset(g_propmap, 0, sizeof(*g_propmap) * PROPMAP_SIZE * PROPMAP_SIZE);
+	gen_propmap = malloc(sizeof(*gen_propmap) * PROPMAP_SIZE * PROPMAP_SIZE);
+	memset(gen_propmap, 0, sizeof(*gen_propmap) * PROPMAP_SIZE * PROPMAP_SIZE);
 
 	*numTrees = 0;
 	*numBldgs = 0;
 
 	// generate a propmap to roughly place clusters of objects
-	ac_gen_propmap();
+	gen_create_propmap();
 
 	// use the propmap to place the actual objects
-	g_proptree = ac_gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+	gen_proptree = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 							0, 0, PROPMAP_SIZE / 2);
 
-	ac_game_loading_tick();
+	g_loading_tick();
 
-	free(g_propmap);
+	free(gen_propmap);
 }
 
-void ac_gen_free_proptree(ac_prop_t *n) {
+void gen_free_proptree(ac_prop_t *n) {
 	if (n == NULL)
-		n = g_proptree;
+		n = gen_proptree;
 	// it's enough to just check the existence of the 1st child because a node
 	// will always either have 4 children or none
 	if (n->trees == NULL && n->bldgs == NULL && n->child[0] != NULL) {
-		ac_gen_free_proptree(n->child[0]);
-		ac_gen_free_proptree(n->child[1]);
-		ac_gen_free_proptree(n->child[2]);
-		ac_gen_free_proptree(n->child[3]);
+		gen_free_proptree(n->child[0]);
+		gen_free_proptree(n->child[1]);
+		gen_free_proptree(n->child[2]);
+		gen_free_proptree(n->child[3]);
 	}
 	free(n);
 }
