@@ -1,20 +1,31 @@
 /**
-\mainpage AC-130 - a 3D arcade shooter game
+\mainpage AC-130
+\anchor mainpage
+
+\htmlonly <div style="text-align: center"> \endhtmlonly
+\latexonly \begin{center} \endlatexonly
+A 3D arcade shooter game\n
+http://ac130.inequation.org/
+\latexonly \end{center} \endlatexonly
+\htmlonly </div> \endhtmlonly
+
 \b Computer \b Programming \b Laboratory
 \date Gliwice, June 11, 2010
 \author Leszek Godlewski <leszgod081@student.polsl.pl>\n
 Computer Science, sem. II, gr. I, section I\n
+Faculty of Automatic Control, Electronics and Computer Science\n
+Silesian University of Technology\n
 Teacher: Tomasz Wojdyła\n
 
 \section toc Table of contents
--# \ref intro
+-# \subpage intro
 -# Analysis and design
-	-# \ref arch
-	-# \ref generator
-	-# \ref renderer
-	-# \ref game
--# \ref extern_spec
--# \ref intern_spec
--# \ref testing
--# \ref conclusions
+	-# \subpage arch
+	-# \subpage game
+	-# \subpage generator
+	-# \subpage renderer
+-# \subpage extern_spec
+-# \subpage intern_spec
+-# \subpage testing
+-# \subpage conclusions
 **/

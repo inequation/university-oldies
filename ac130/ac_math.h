@@ -76,7 +76,7 @@ extern inline float ac_vec_length(ac_vec4_t a) STACK_ALIGN;
 extern inline ac_vec4_t ac_vec_normalize(ac_vec4_t a) STACK_ALIGN;
 
 /// Vector decomposition into a unit length direction vector and length scalar.
-/// \param v	vector to decompose
+/// \param b	vector to decompose
 /// \param a	pointer to vector to put the direction vector into
 extern inline float ac_vec_decompose(ac_vec4_t b, ac_vec4_t *a) STACK_ALIGN;
 

@@ -205,7 +205,7 @@ void r_shutdown(void);
 void r_set_heightmap();
 
 /// \brief Starts the rendering of a new frame. Also sets the point of view.
-/// \note				Must be called *before* \ref r_finish3D
+/// \note				Must be called *before* \ref r_finish_3D
 void r_start_scene(int time, ac_viewpoint_t *vp);
 
 /// \brief Starts the FX rendering stage.
@@ -262,12 +262,12 @@ void r_draw_lines(float pts[][2], uint num_pts, float width);
 /// \brief Finishes the 3D rendering stage.
 /// Flushes the scene to the render target and switches to the 2D (HUD) stage.
 /// \note				Must be called *after* \ref r_start_scene and
-///						*before* \ref r_finish2D
+///						*before* \ref r_finish_2D
 void r_finish_3D(void);
 
 /// \brief Finishes the 2D rendering stage.
 /// Flushes the 2D (HUD) elements to the render target.
-/// \note				Must be called *after* \ref r_finish3D and
+/// \note				Must be called *after* \ref r_finish_3D and
 ///						*before* \ref r_composite
 void r_finish_2D(void);
 

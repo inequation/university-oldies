@@ -4,6 +4,7 @@
 // Main module
 
 #include <string.h>
+#include <time.h>
 #include "ac130.h"
 
 int m_screen_width = 1024;
@@ -79,6 +80,9 @@ int main (int argc, char *argv[]) {
 		fprintf(stderr, "Unable to init renderer\n");
 		return 1;
 	}
+
+	// initialize the system random number generator
+	srand((uint)time(NULL));
 
 	// set window caption to say that we're working
 	SDL_WM_SetCaption("AC-130 - Generating resources, please wait...",
