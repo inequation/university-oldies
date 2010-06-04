@@ -3,10 +3,8 @@
 \anchor mainpage
 
 \htmlonly <div style="text-align: center"> \endhtmlonly
-\latexonly \begin{center} \endlatexonly
 A 3D arcade shooter game\n
 http://ac130.inequation.org/
-\latexonly \end{center} \endlatexonly
 \htmlonly </div> \endhtmlonly
 
 \b Computer \b Programming \b Laboratory

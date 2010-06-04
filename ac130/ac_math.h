@@ -26,8 +26,8 @@
 
 /// 4-element vector union.
 typedef union {
-	ALIGNED_16 float		f[4];	/// Traditional floating point numbers.
-	__m128					sse;	/// SSE 128-bit data type.
+	ALIGNED_16 float		f[4];	///< traditional floating point numbers
+	__m128					sse;	///< SSE 128-bit data type
 } ac_vec4_t;
 
 // This is to fix certain SSE-related crashes. What happens is that since I'm
@@ -37,42 +37,43 @@ typedef union {
 // compiler to add some code to enforce 16-byte alignment.
 #define STACK_ALIGN		__attribute__((force_align_arg_pointer))
 
-/// a = [x, y, z, w]
+/// \f$ \vec a = [x, y, z, w] \f$
 extern inline ac_vec4_t ac_vec_set(float x, float y, float z, float w)
 	STACK_ALIGN;
 
-/// a = [b, b, b, b]
+/// \f$ \vec a = [b, b, b, b] \f$
 extern inline ac_vec4_t ac_vec_setall(float b) STACK_ALIGN;
 
-/// b = -a
+/// \f$ \vec b = - \vec a \f$
 extern inline ac_vec4_t ac_vec_negate(ac_vec4_t a) STACK_ALIGN;
 
-/// c = a + b
+/// \f$ \vec c = \vec a + \vec b \f$
 extern inline ac_vec4_t ac_vec_add(ac_vec4_t a, ac_vec4_t b) STACK_ALIGN;
 
-/// c = a - b
+/// \f$ \vec c = \vec a - \vec b \f$
 extern inline ac_vec4_t ac_vec_sub(ac_vec4_t a, ac_vec4_t b) STACK_ALIGN;
 
-/// c = a * b (c1 = a1 * b1, c2 = a2 * b2 etc.)
+/// \f$ \vec c = \vec a * \vec b \f$ (\f$ c_1 = a_1 * b_1, c_2 = a_2 * b_2 \f$
+/// etc.)
 extern inline ac_vec4_t ac_vec_mul(ac_vec4_t a, ac_vec4_t b) STACK_ALIGN;
 
-/// c = [a1 * b, a2 * b, a3 * b, a4 * b]
+/// \f$ \vec c = [a_1 * b, a_2 * b, a_3 * b, a_4 * b] \f$
 extern inline ac_vec4_t ac_vec_mulf(ac_vec4_t a, float b) STACK_ALIGN;
 
-/// d = a * b + c
+/// \f$ \vec d = \vec a * \vec b + \vec c \f$
 extern inline ac_vec4_t ac_vec_ma(ac_vec4_t a, ac_vec4_t b, ac_vec4_t c)
 	STACK_ALIGN;
 
-/// Dot product of a and b.
+/// \f$ c = \vec a \circ \vec b \f$
 extern inline float ac_vec_dot(ac_vec4_t a, ac_vec4_t b) STACK_ALIGN;
 
-/// Cross product of a and b.
+/// \f$ \vec c = \vec a \times \vec b \f$
 extern inline ac_vec4_t ac_vec_cross(ac_vec4_t a, ac_vec4_t b) STACK_ALIGN;
 
-/// Length of vector a.
+/// \f$ l = |\vec a| \f$
 extern inline float ac_vec_length(ac_vec4_t a) STACK_ALIGN;
 
-/// Vector normalization.
+/// \f$ \vec n = \frac{\vec a}{|\vec a|} \f$
 extern inline ac_vec4_t ac_vec_normalize(ac_vec4_t a) STACK_ALIGN;
 
 /// Vector decomposition into a unit length direction vector and length scalar.
