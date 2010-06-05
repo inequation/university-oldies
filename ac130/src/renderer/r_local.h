@@ -6,7 +6,7 @@
 #ifndef R_LOCAL_H
 #define R_LOCAL_H
 
-#include "ac130.h"
+#include "../ac130.h"
 #ifdef WIN32	// enable static linking on win32
 	#define GLEW_STATIC
 #endif // WIN32

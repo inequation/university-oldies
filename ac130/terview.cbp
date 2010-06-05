@@ -36,15 +36,15 @@
 		<Linker>
 			<Add library="SDL" />
 		</Linker>
-		<Unit filename="ac130.h" />
-		<Unit filename="ac_math.c">
+		<Unit filename="src/ac130.h" />
+		<Unit filename="src/ac_math.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ac_math.h" />
-		<Unit filename="generator.c">
+		<Unit filename="src/ac_math.h" />
+		<Unit filename="src/generator.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="terview.c">
+		<Unit filename="src/tools/terview.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>

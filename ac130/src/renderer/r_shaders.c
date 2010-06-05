@@ -7,13 +7,13 @@
 
 // embed shader sources
 #define STRINGIFY(A)  #A
-#include "terrain_vs.glsl"
-#include "terrain_fs.glsl"
-#include "prop_vs.glsl"
-#include "prop_fs.glsl"
-#include "font_fs.glsl"
-#include "compositor_vs.glsl"
-#include "compositor_fs.glsl"
+#include "../shaders/terrain_vs.glsl"
+#include "../shaders/terrain_fs.glsl"
+#include "../shaders/prop_vs.glsl"
+#include "../shaders/prop_fs.glsl"
+#include "../shaders/font_fs.glsl"
+#include "../shaders/compositor_vs.glsl"
+#include "../shaders/compositor_fs.glsl"
 
 uint		r_ter_prog = 0;
 uint		r_ter_vs = 0;

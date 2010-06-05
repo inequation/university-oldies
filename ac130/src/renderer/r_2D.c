@@ -7,7 +7,7 @@
 
 // embed font texture
 #define STRINGIFY(A)  #A
-#include "font.h"
+#include "../font.h"
 
 uint		r_font_tex;
 

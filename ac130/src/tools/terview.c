@@ -3,7 +3,11 @@
 
 // Terrain heightmap viewer app
 
-#include "ac130.h"
+#include "../ac130.h"
+
+void g_loading_tick(void) {
+	// placeholder for the program to link properly
+}
 
 int main(int argc, char **argv) {
 	// initialize SDL video
@@ -24,9 +28,10 @@ int main(int argc, char **argv) {
 	}
 
 	SDL_WM_SetCaption("Generating heightmap...", "Terrain viewer");
+	gen_terrain(0xDEADBEEF);
 	// load the heightmap into a surface
 	SDL_Surface *bmp = SDL_CreateRGBSurfaceFrom(
-		gen_terrain(0xDEADBEEF), HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 8,
+		gen_heightmap, HEIGHTMAP_SIZE, HEIGHTMAP_SIZE, 8,
 		HEIGHTMAP_SIZE, 0xFF, 0xFF, 0xFF, 0);
 	SDL_WM_SetCaption("Terrain viewer", "Terrain viewer");
 

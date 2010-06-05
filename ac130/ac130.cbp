@@ -111,55 +111,55 @@
 			<Add option="-msse" />
 			<Add option="-msse2" />
 		</Compiler>
-		<Unit filename="ac130.h" />
-		<Unit filename="ac_math.c">
+		<Unit filename="src/ac130.h" />
+		<Unit filename="src/ac_math.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="ac_math.h" />
-		<Unit filename="compositor_fs.glsl">
+		<Unit filename="src/ac_math.h" />
+		<Unit filename="src/shaders/compositor_fs.glsl">
 			<Option target="Unix Debug" />
 			<Option target="Unix Release" />
 			<Option target="Win32 Debug" />
 		</Unit>
-		<Unit filename="compositor_vs.glsl">
+		<Unit filename="src/shaders/compositor_vs.glsl">
 			<Option target="Unix Debug" />
 			<Option target="Unix Release" />
 			<Option target="Win32 Debug" />
 		</Unit>
-		<Unit filename="font.h" />
-		<Unit filename="font_fs.glsl" />
-		<Unit filename="game.c">
+		<Unit filename="src/font.h" />
+		<Unit filename="src/shaders/font_fs.glsl" />
+		<Unit filename="src/game.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="generator.c">
+		<Unit filename="src/generator.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="main.c">
+		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="prop_fs.glsl" />
-		<Unit filename="prop_vs.glsl" />
-		<Unit filename="r_2D.c">
+		<Unit filename="src/shaders/prop_fs.glsl" />
+		<Unit filename="src/shaders/prop_vs.glsl" />
+		<Unit filename="src/renderer/r_2D.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="r_fx.c">
+		<Unit filename="src/renderer/r_fx.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="r_local.h" />
-		<Unit filename="r_main.c">
+		<Unit filename="src/renderer/r_local.h" />
+		<Unit filename="src/renderer/r_main.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="r_props.c">
+		<Unit filename="src/renderer/r_props.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="r_shaders.c">
+		<Unit filename="src/renderer/r_shaders.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="r_terrain.c">
+		<Unit filename="src/renderer/r_terrain.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="terrain_fs.glsl" />
-		<Unit filename="terrain_vs.glsl" />
+		<Unit filename="src/shaders/terrain_fs.glsl" />
+		<Unit filename="src/shaders/terrain_vs.glsl" />
 		<Extensions>
 			<code_completion />
 			<envvars />

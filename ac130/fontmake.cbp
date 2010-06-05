@@ -33,7 +33,7 @@
 		<Compiler>
 			<Add option="-Wall" />
 		</Compiler>
-		<Unit filename="fontmake.c">
+		<Unit filename="src/tools/fontmake.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Extensions>
