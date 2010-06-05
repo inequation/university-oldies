@@ -10,8 +10,12 @@
 /// \brief Public interface to the math module.
 
 // general math
-#define MIN(a, b)			((a) < (b) ? (a) : (b))
-#define MAX(a, b)			((a) > (b) ? (a) : (b))
+
+/// \f$ min(a, b) \f$
+extern inline float ac_min(float a, float b);
+
+/// \f$ max(a, b) \f$
+extern inline float ac_max(float a, float b);
 
 // vector math
 

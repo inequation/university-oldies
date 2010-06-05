@@ -23,7 +23,9 @@ receives 1 point per each 10 units of damage successfully dealt to enemy forces,
 and -1 point per each damage unit dealt to friendlies, plus a -50 "bonus" per
 every friendly fatal casualty. As you can see, it pays to watch your fire.
 
+\if build_html
 Next: \ref generator
 
-Previous: \ref arch
+Previous: \ref barch
+\endif
 **/

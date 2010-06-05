@@ -9,6 +9,14 @@
 
 static const unsigned int	negzero = 0x80000000;
 
+inline float ac_min(float a, float b) {
+	return a < b ? a : b;
+}
+
+inline float ac_max(float a, float b) {
+	return a > b ? a : b;
+}
+
 inline ac_vec4_t ac_vec_set(float x, float y, float z, float w) {
 	return (ac_vec4_t)_mm_set_ps(w, z, y, x);
 }

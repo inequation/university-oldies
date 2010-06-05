@@ -51,6 +51,8 @@ void r_create_props(void) {
 }
 
 static void r_recurse_proptree_drawall(ac_prop_t *node) {
+	if (!node)
+		return;
 	if (node->trees != NULL) {
 		int i;
 		float d2;
@@ -82,6 +84,7 @@ static void r_recurse_proptree_drawall(ac_prop_t *node) {
 			*r_vert_counter += num - 1;
 			*r_tri_counter += num - 2;
 		}
+		return;
 	} else if (node->bldgs != NULL) {
 		int i;
 		ac_bldg_t *b;
@@ -103,21 +106,17 @@ static void r_recurse_proptree_drawall(ac_prop_t *node) {
 				*r_tri_counter += BLDG_SLNT_INDICES - 2;
 			}
 		}
-	} else if (node->child[0] != NULL) {
-		// it's enough to just check the existence of the 1st child because a
-		// node will always either have 4 children or none
-		r_recurse_proptree_drawall(node->child[0]);
-		r_recurse_proptree_drawall(node->child[1]);
-		r_recurse_proptree_drawall(node->child[2]);
-		r_recurse_proptree_drawall(node->child[3]);
+		return;
 	}
+	r_recurse_proptree_drawall(node->child[0]);
+	r_recurse_proptree_drawall(node->child[1]);
+	r_recurse_proptree_drawall(node->child[2]);
+	r_recurse_proptree_drawall(node->child[3]);
 }
 
 static void r_recurse_proptree(ac_prop_t *node, int step) {
-	if (step < 1) {
-		r_recurse_proptree_drawall(node);
+	if (!node)
 		return;
-	}
 	switch (r_cull_bbox(node->bounds)) {
 		case CR_OUTSIDE:
 			return;
@@ -125,7 +124,10 @@ static void r_recurse_proptree(ac_prop_t *node, int step) {
 			r_recurse_proptree_drawall(node);
 			break;
 		case CR_INTERSECT:
-			step /= 2;
+			if ((step >>= 1) < 2) {
+				r_recurse_proptree_drawall(node);
+				return;
+			}
 			r_recurse_proptree(node->child[0], step);
 			r_recurse_proptree(node->child[1], step);
 			r_recurse_proptree(node->child[2], step);

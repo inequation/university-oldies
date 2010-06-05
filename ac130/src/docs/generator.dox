@@ -154,7 +154,9 @@ particle always revolves around the point in the centre.
 The algorithms used to create textures are trivial and are best described by
 their code.
 
+\if build_html
 Next: \ref renderer
 
 Previous: \ref game
+\endif
 **/

@@ -236,14 +236,6 @@ void gen_props(uchar *texture, ac_vertex_t *verts, uchar *indices) {
 			indices[iofs++] = vofs++;
 		}
 		indices[iofs++] = vofs - base;	// first base vertex - full circle
-		// now copy the tree TREES_PER_FIELD - 1 times
-		/*for (i = 0; l < TREES_PER_FIELD - 1; l++) {
-			// make a degenerate triangle
-			indices[iofs] = indices[iofs - 1];
-			indices[++iofs] = 0;
-			for (++iofs, j = 0; j < base; j++, iofs++)
-				indices[iofs] = indices[iofs - 2 - base];
-		}*/
 	}
 
 	g_loading_tick();
@@ -472,9 +464,7 @@ static ac_prop_t *gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 					int *numBldgs, ac_bldg_t *bldgs, int x, int y, int step) {
 	int i;
 	float tx, tz, min, max;
-	ac_prop_t *node = malloc(sizeof(ac_prop_t));
-
-	memset(node, 0, sizeof(*node));
+	ac_prop_t *node;
 
 	min = FLT_MAX;
 	max = -FLT_MAX;
@@ -483,10 +473,10 @@ static ac_prop_t *gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 		float h;
 		switch (gen_propmap[y * PROPMAP_SIZE + x]) {
 			case 0:
-				break;
+				return NULL;
 			case 1:	// tree node
+				node = calloc(1, sizeof(ac_prop_t));
 				node->trees = &trees[*numTrees];
-				//node->bldgs = NULL;
 				for (i = 0; i < TREES_PER_FIELD; i++) {
 					tx = (x << PROPMAP_SHIFT) + 0.01 * (gen_rand()
 						% ((1 << PROPMAP_SHIFT) * 100));
@@ -512,7 +502,7 @@ static ac_prop_t *gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 				(*numTrees) += TREES_PER_FIELD;
 				break;
 			case 2:	// building node
-				//node->trees = NULL;
+				node = calloc(1, sizeof(ac_prop_t));
 				node->bldgs = &bldgs[*numBldgs];
 				for (i = 0; i < BLDGS_PER_FIELD; i++) {
 					tx = (x << PROPMAP_SHIFT) + 0.01 * (gen_rand()
@@ -547,22 +537,32 @@ static ac_prop_t *gen_recurse_propmap(int *numTrees, ac_tree_t *trees,
 				break;
 		}
 	} else {
-		node->child[0] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		ac_prop_t *c1, *c2, *c3, *c4;
+		c1 = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x, y, step / 2);
-		node->child[1] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		c2 = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x + step, y, step / 2);
-		node->child[2] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		c3 = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x, y + step, step / 2);
-		node->child[3] = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
+		c4 = gen_recurse_propmap(numTrees, trees, numBldgs, bldgs,
 								x + step, y + step, step / 2);
-		min = MIN(node->child[0]->bounds[0].f[1],
-			MIN(node->child[1]->bounds[0].f[1],
-				MIN(node->child[2]->bounds[0].f[1],
-					node->child[3]->bounds[0].f[1])));
-		max = MAX(node->child[0]->bounds[1].f[1],
-			MAX(node->child[1]->bounds[1].f[1],
-				MAX(node->child[2]->bounds[1].f[1],
-					node->child[3]->bounds[1].f[1])));
+		if (!c1 && !c2 && !c3 && !c4)
+			// no children, no point in creating a node
+			return NULL;
+		node = calloc(1, sizeof(ac_prop_t));
+		// don't try to check the bounds of NULL children
+		min = ac_min(c1 ? c1->bounds[0].f[1] : FLT_MAX,
+			ac_min(c2 ? c2->bounds[0].f[1] : FLT_MAX,
+				ac_min(c3 ? c3->bounds[0].f[1] : FLT_MAX,
+					c4 ? c4->bounds[0].f[1] : FLT_MAX)));
+		max = ac_max(c1 ? c1->bounds[1].f[1] : -FLT_MAX,
+			ac_max(c2 ? c2->bounds[1].f[1] : -FLT_MAX,
+				ac_max(c3 ? c3->bounds[1].f[1] : -FLT_MAX,
+					c4 ? c4->bounds[1].f[1] : -FLT_MAX)));
+		node->child[0] = c1;
+		node->child[1] = c2;
+		node->child[2] = c3;
+		node->child[3] = c4;
 	}
 	node->bounds[0] = ac_vec_set(
 		(x << PROPMAP_SHIFT) - HEIGHTMAP_SIZE / 2,
@@ -598,15 +598,16 @@ void gen_proplists(int *numTrees, ac_tree_t *trees,
 }
 
 void gen_free_proptree(ac_prop_t *n) {
+	int i;
 	if (n == NULL)
 		n = gen_proptree;
 	// it's enough to just check the existence of the 1st child because a node
 	// will always either have 4 children or none
-	if (n->trees == NULL && n->bldgs == NULL && n->child[0] != NULL) {
-		gen_free_proptree(n->child[0]);
-		gen_free_proptree(n->child[1]);
-		gen_free_proptree(n->child[2]);
-		gen_free_proptree(n->child[3]);
+	if (n->trees == NULL && n->bldgs == NULL) {
+		for (i = 0; i < 4; i++) {
+			if (n->child[i])
+				gen_free_proptree(n->child[i]);
+		}
 	}
 	free(n);
 }

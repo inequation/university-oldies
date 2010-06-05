@@ -19,7 +19,9 @@ content as possible procedurally generated. As a result, the Linux game
 executable is only about 320 kB, 256 kB of which is occupied by the font texture
 bitmap - the only non-procedurally generated element of the game.
 
-Next: \ref arch
+\if build_html
+Next: \ref barch
 
 Previous: \ref mainpage "Table of contents"
+\endif
 **/

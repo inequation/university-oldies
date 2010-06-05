@@ -1,5 +1,5 @@
 /**
-\page arch The architecture
+\page barch Architecture
 \section startp Starting points
 This isn't the first game I have written and as such I already had a pretty good
 idea about what to do and what not to do. Thus, I had a few key, even though
@@ -77,7 +77,9 @@ and effortlessly develop code that works on both platforms without modification.
 
 Doxygen has been used to generate the documentation you are currently reading.
 
+\if build_html
 Next: \ref game
 
 Previous: \ref intro
+\endif
 **/
