@@ -1,10 +1,10 @@
 /**
 \page intro Introduction
 \section story Backstory
-Somewhere in the world, war rages. You are a TV operator aboard an AC-130
+<i>Somewhere in the world, war rages. You are a TV operator aboard an AC-130
 gunship. Your mission is to provide fire support for friendly troops on the
 ground. Beware of friendly fire! \b Do \b not fire on troops marked by a
-flashing IR strobe!
+flashing IR strobe!</i>
 
 \section desc Description
 For my second semester project in programming I decided to write a simple, yet
@@ -20,7 +20,7 @@ executable is only about 320 kB, 256 kB of which is occupied by the font texture
 bitmap - the only non-procedurally generated element of the game.
 
 \if build_html
-Next: \ref barch
+Next: \ref arch
 
 Previous: \ref mainpage "Table of contents"
 \endif

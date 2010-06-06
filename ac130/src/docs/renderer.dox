@@ -1,5 +1,5 @@
 /**
-\page renderer The renderer
+\page renderer Renderer
 The 3D renderer at over 1000 lines of code is the largest module of the program.
 Through a simple API it provides an abstraction layer for the game logic to
 visualize the game world. The architecture of the renderer is always dictated by
@@ -122,4 +122,10 @@ the left of the base pixel, resulting in a smudge that is biased to the right.
 	http://zach.in.tu-clausthal.de/teaching/cg_literatur/vfc_bbox.pdf
 -	\anchor Zelsnack04 [2]
 	http://developer.download.nvidia.com/SDK/9.5/Samples/DEMOS/OpenGL/src/glsl_pseudo_instancing/docs/glsl_pseudo_instancing.pdf
+
+\if build_html
+Next: \ref extern_spec
+
+Previous: \ref generator
+\endif
 **/

@@ -1,5 +1,5 @@
 /**
-\page generator The content generator
+\page generator Content generator
 The generator module was the first one to see the world. It generated terrains
 before they could even be rendered, and then grew and expanded to provide an
 even wider variety of art assets to the game.

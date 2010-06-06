@@ -20,8 +20,10 @@
 /// \brief Public interfaces to all modules.
 
 // =========================================================
-// Type definitions
+/// \addtogroup pub_types Public type definitions
 // =========================================================
+
+/// @{
 
 typedef unsigned char	uchar;
 typedef unsigned short	ushort;
@@ -29,48 +31,40 @@ typedef unsigned int	uint;
 
 /// Tree prop structure.
 typedef struct {
-	/// position at which to spawn the tree
-	ac_vec4_t				pos;
-	/// orientation (rotation around the Y axis) of the tree
-	float					ang;
-	/// horizontal scale factor of the tree
-	float					XZscale;
-	/// vertical scale factor of the tree
-	float					Yscale;
+	ac_vec4_t	pos;			///< position at which to spawn the tree
+	float		ang;			///< orientation (rotation around the Y axis)
+	float		XZscale;		///< horizontal scale factor of the tree
+	float		Yscale;			///< vertical scale factor of the tree
 } ac_tree_t;
 
 /// Building prop structure.
 typedef struct {
-	/// position of the building's origin
-	ac_vec4_t				pos;
-	/// orientation (rotation around the Y axis) of the building
-	float					ang;
-	/// horiz. X scale factor of the building
-	float					Xscale;
-	/// horiz. Z scale factor of the building
-	float					Yscale;
-	/// vertical scale factor of the building
-	float					Zscale;
-	/// "architectural" setting - if true, adds a building with a slanted roof,
-	/// otherwise a flat one
-	bool					slantedRoof;
+	ac_vec4_t	pos;			///< position of the building's origin
+	float		ang;			///< orientation (rotation around the Y axis)
+	float		Xscale;			///< horiz. X scale factor of the building
+	float		Yscale;			///< horiz. Z scale factor of the building
+	float		Zscale;			///< vertical scale factor of the building
+	bool		slantedRoof;	///< "architectural" setting - if true, the
+								///  building has a slanted roof, otherwise a
+								///  flatone
 } ac_bldg_t;
 
 /// Prop tree node structure.
 typedef struct ac_prop_s {
-	ac_vec4_t				bounds[2];	///< 2 points describing the AABB (axis-
-										///< aligned bounding box) of the node
-	struct ac_prop_s		*child[4];	///< pointers to children nodes
-	ac_tree_t				*trees;		///< tree array (NULL if node is a
-										///< branch or a building prop leaf)
-	ac_bldg_t				*bldgs;		///< building array (NULL if node is a
-										///< branch or a tree prop leaf)
+	ac_vec4_t			bounds[2];	///< 2 points describing the AABB (axis-
+									///  aligned bounding box) of the node
+	struct ac_prop_s	*child[4];	///< pointers to children nodes
+	ac_tree_t			*trees;		///< tree array (NULL if node is a
+									///  branch or a building prop leaf)
+	ac_bldg_t			*bldgs;		///< building array (NULL if node is a
+									///  branch or a tree prop leaf)
 } ac_prop_t;
 
 /// Viewpoint definition structure.
 typedef struct {
 	ac_vec4_t	origin;		///< camera position
-	float		angles[2];	///< camera direction defined by yaw and pitch angles
+	float		angles[2];	///< camera direction defined by yaw and pitch
+							///  angles
 	float		fov;		///< field of view angle in radians
 } ac_viewpoint_t;
 
@@ -80,9 +74,26 @@ typedef struct {
 	float		st[2];		///< texture coordinates
 } ac_vertex_t;
 
+/// Footmobile (ground troop) stance enumeration.
+typedef enum {
+	STANCE_STAND,			///< standing (waiting or moving)
+	STANCE_CROUCH			///< crouching (firing)
+} ac_stance_t;
+
+/// Footmobile (ground troop) data structure.
+typedef struct {
+	ac_vec4_t	pos;
+	float		ang;
+	ac_stance_t	stance;
+} ac_footmobile_t;
+
+/// @}
+
 // =========================================================
-// Main module interface
+/// \addtogroup pub_main Public main module interface
 // =========================================================
+
+/// @{
 
 /// game screen width in pixels
 extern int m_screen_width;
@@ -91,9 +102,13 @@ extern int m_screen_height;
 /// whether the game is running in full screen mode or not
 extern bool m_full_screen;
 
+/// @}
+
 // =========================================================
-// Content generator interface
+/// \addtogroup pub_gen Public content generator interface
 // =========================================================
+
+/// @{
 
 /// \brief size of terrain height map
 /// (in pixels; 1 pixel translates to 1 square metre in game world)
@@ -185,9 +200,13 @@ void gen_proplists(int *numTrees, ac_tree_t *trees,
 ///						free the entire tree)
 void gen_free_proptree(ac_prop_t *n);
 
+/// @}
+
 // =========================================================
-// Renderer interface
+/// \addtogroup pub_r Public renderer interface
 // =========================================================
+
+/// @{
 
 /// \brief Initializes the renderer.
 /// \param vcounter		vertex counter address (for performance measurement)
@@ -211,13 +230,11 @@ void r_start_scene(int time, ac_viewpoint_t *vp);
 /// \brief Starts the FX rendering stage.
 /// Makes the necessary state changes, etc.
 /// \sa r_finish_fx
-/// \sa r_draw_tracer
 void r_start_fx(void);
 
 /// \brief Finishes the FX rendering stage.
 /// Makes the necessary state changes, etc.
 /// \sa r_start_fx
-/// \sa r_draw_tracer
 void r_finish_fx(void);
 
 /// \brief Draws a smoke particle.
@@ -235,6 +252,21 @@ void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
 /// \param dir			tracer's direction
 /// \param scale		scale of the tracer (length in metres, width in pixels)
 void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
+
+/// \brief Starts the footmobile rendering stage.
+/// Makes the necessary state changes, etc.
+/// \sa r_finish_footmobiles
+void r_start_footmobiles(void);
+
+/// \brief Starts the footmobile rendering stage.
+/// Makes the necessary state changes, etc.
+/// \sa r_start_footmobiles
+void r_finish_footmobiles(void);
+
+/// \brief Draws a footmobile squad of the given size.
+/// \param squad		pointer to a footmobile array
+/// \param troops		number of soldiers in the squad
+void r_draw_squad(ac_footmobile_t *squad, size_t troops);
 
 /// \brief Draws a string at given normalized coordinates in given scale.
 /// Coordinates must fall in the [0..1] range. The text will be top-left-
@@ -279,9 +311,13 @@ void r_finish_2D(void);
 ///						M102 explosions)
 void r_composite(float negative, float contrast);
 
+/// @}
+
 // =========================================================
-// Game logic interface
+/// \addtogroup pub_g Game logic interface
 // =========================================================
+
+/// @{
 
 /// Bitflags representing the states of different buttons and keys.
 typedef enum {
@@ -323,5 +359,7 @@ void g_frame(int ticks, float frameTime, ac_input_t *input);
 /// \brief Updates the game loading screen.
 /// \note				Only to be called before \ref g_init
 void g_loading_tick(void);
+
+/// @}
 
 #endif // AC130_H

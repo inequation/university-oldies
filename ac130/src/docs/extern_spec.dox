@@ -1,4 +1,10 @@
 /**
 \page extern_spec External specification
+The game displays instructions during the loading and
 
+\if build_html
+Next: \ref intern_spec
+
+Previous: \ref renderer
+\endif
 **/

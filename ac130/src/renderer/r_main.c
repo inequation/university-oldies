@@ -291,11 +291,13 @@ bool r_init(uint *vcounter, uint *tcounter,
 	r_create_props();
 	r_create_fx();
 	r_create_font();
+	r_create_footmobile();
 
 	return true;
 }
 
 void r_shutdown(void) {
+	r_destroy_footmobile();
 	r_destroy_font();
 	r_destroy_fx();
 	r_destroy_props();

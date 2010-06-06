@@ -116,18 +116,8 @@
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/ac_math.h" />
-		<Unit filename="src/shaders/compositor_fs.glsl">
-			<Option target="Unix Debug" />
-			<Option target="Unix Release" />
-			<Option target="Win32 Debug" />
-		</Unit>
-		<Unit filename="src/shaders/compositor_vs.glsl">
-			<Option target="Unix Debug" />
-			<Option target="Unix Release" />
-			<Option target="Win32 Debug" />
-		</Unit>
 		<Unit filename="src/font.h" />
-		<Unit filename="src/shaders/font_fs.glsl" />
+		<Unit filename="src/footmobile.h" />
 		<Unit filename="src/game.c">
 			<Option compilerVar="CC" />
 		</Unit>
@@ -137,9 +127,10 @@
 		<Unit filename="src/main.c">
 			<Option compilerVar="CC" />
 		</Unit>
-		<Unit filename="src/shaders/prop_fs.glsl" />
-		<Unit filename="src/shaders/prop_vs.glsl" />
 		<Unit filename="src/renderer/r_2D.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/renderer/r_footmobile.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/renderer/r_fx.c">
@@ -158,6 +149,22 @@
 		<Unit filename="src/renderer/r_terrain.c">
 			<Option compilerVar="CC" />
 		</Unit>
+		<Unit filename="src/shaders/compositor_fs.glsl">
+			<Option target="Unix Debug" />
+			<Option target="Unix Release" />
+			<Option target="Win32 Debug" />
+		</Unit>
+		<Unit filename="src/shaders/compositor_vs.glsl">
+			<Option target="Unix Debug" />
+			<Option target="Unix Release" />
+			<Option target="Win32 Debug" />
+		</Unit>
+		<Unit filename="src/shaders/font_fs.glsl" />
+		<Unit filename="src/shaders/footmobile_vs.glsl" />
+		<Unit filename="src/shaders/prop_fs.glsl" />
+		<Unit filename="src/shaders/prop_vs.glsl" />
+		<Unit filename="src/shaders/sprite_fs.glsl" />
+		<Unit filename="src/shaders/sprite_vs.glsl" />
 		<Unit filename="src/shaders/terrain_fs.glsl" />
 		<Unit filename="src/shaders/terrain_vs.glsl" />
 		<Extensions>

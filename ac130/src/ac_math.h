@@ -7,7 +7,9 @@
 #include <math.h>
 
 /// \file ac_math.h
-/// \brief Public interface to the math module.
+/// \brief Public interface to the math library.
+/// \addtogroup mathlib Math library
+/// @{
 
 // general math
 
@@ -83,6 +85,7 @@ extern inline ac_vec4_t ac_vec_normalize(ac_vec4_t a) STACK_ALIGN;
 /// Vector decomposition into a unit length direction vector and length scalar.
 /// \param b	vector to decompose
 /// \param a	pointer to vector to put the direction vector into
+/// \return		length of vector \e b
 extern inline float ac_vec_decompose(ac_vec4_t b, ac_vec4_t *a) STACK_ALIGN;
 
 /// Write from __m128 (a) to flat floats (b).
@@ -90,5 +93,7 @@ extern inline void ac_vec_tofloat(ac_vec4_t a, float b[4]) STACK_ALIGN;
 
 /// Write from flat floats (a) to __m128 (b).
 extern inline ac_vec4_t ac_vec_tosse(float *f) STACK_ALIGN;
+
+/// @}
 
 #endif // AC_MATH_H

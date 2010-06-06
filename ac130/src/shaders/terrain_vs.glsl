@@ -19,8 +19,8 @@ float get_height(vec2 st) {
 	// vector array index
 	float v = index * 0.25;
 	// component index
-	float c = v - floor(v);
-	v -= c;
+	float c = fract(v);
+	v = floor(v);
 	c *= 4.0;
 	return heightSamples[int(v)][int(c)];
 }

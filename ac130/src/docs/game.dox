@@ -1,5 +1,5 @@
 /**
-\page game The game logic
+\page game Game logic
 \section Gameplay
 While the idea for an AC-130 game and how it could technically be made was all
 fun and simple, it wasn't nearly as easy to come up with what the actual object
@@ -26,6 +26,6 @@ every friendly fatal casualty. As you can see, it pays to watch your fire.
 \if build_html
 Next: \ref generator
 
-Previous: \ref barch
+Previous: \ref arch
 \endif
 **/

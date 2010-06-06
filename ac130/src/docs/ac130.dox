@@ -19,9 +19,7 @@ Faculty of Automatic Control, Electronics and Computer Science\n
 Silesian University of Technology\n
 Teacher: Tomasz Wojdyła\n
 
-**/ /*
 \if build_html
-*/ /**
 \section toc Table of contents
 -# \subpage intro
 -# Analysis and design
@@ -33,7 +31,5 @@ Teacher: Tomasz Wojdyła\n
 -# \subpage intern_spec
 -# \subpage testing
 -# \subpage conclusions
-**/ /*
 \endif
-*/ /**
 **/

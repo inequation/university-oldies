@@ -4,6 +4,10 @@
 // Procedural content generation module
 
 #include "ac130.h"
+#include <assert.h>
+
+// make sure we don't use the libc rand() in this file!
+#define rand()	assert(!"Are you kidding me?!")
 
 uchar			gen_heightmap[HEIGHTMAP_SIZE * HEIGHTMAP_SIZE];
 ac_prop_t		*gen_proptree = NULL;
@@ -416,21 +420,21 @@ static void gen_propmap_populate(int x, int y, int *counter, int *trace,
 	if (!(*trace) || !(*counter))
 		return;
 	// try to recurse in one of the directions with a 33% chance
-	if (rand() % 100 > 33)
+	if (gen_rand() % 100 > 33)
 		gen_propmap_populate(x + 1, y, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x + 1, y + 1, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x, y + 1, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x - 1, y + 1, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x - 1, y, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x - 1, y - 1, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x, y - 1, counter, trace, value);
-	if (*counter && rand() % 100 > 33)
+	if (*counter && gen_rand() % 100 > 33)
 		gen_propmap_populate(x + 1, y - 1, counter, trace, value);
 }
 

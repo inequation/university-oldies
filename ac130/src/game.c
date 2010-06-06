@@ -887,6 +887,15 @@ void g_frame(int ticks, float frameTime, ac_input_t *input) {
 	g_advance_particles();
 	r_finish_fx();
 
+	// draw a test footmobile
+	ac_footmobile_t fmb;
+	fmb.pos = ac_vec_set(0, g_sample_height(512, 512), 0, 0);
+	fmb.ang = 0.f;
+	fmb.stance = STANCE_CROUCH;
+	r_start_footmobiles();
+	r_draw_squad(&fmb, 1);
+	r_finish_footmobiles();
+
 	r_finish_3D();
 	if (!g_paused)
 		g_drawHUD(neg);

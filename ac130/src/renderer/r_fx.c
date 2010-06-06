@@ -41,6 +41,8 @@ void r_create_fx(void) {
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 }
 
+// uncomment to restore fixed pipeline sprites
+//#FX_FIXED_PIPELINE
 void r_start_fx(void) {
 	// make the necessary state changes
 	glBindTexture(GL_TEXTURE_2D, r_fx_tex);
@@ -53,20 +55,29 @@ void r_start_fx(void) {
 					(void *)offsetof(ac_vertex_t, pos.f[0]));
 	glTexCoordPointer(2, GL_FLOAT, sizeof(ac_vertex_t),
 					(void *)offsetof(ac_vertex_t, st[0]));
+#ifndef FX_FIXED_PIPELINE
+	glUseProgramObjectARB(r_sprite_prog);
+#endif
 }
 
 void r_finish_fx(void) {
 	// bring the previous state back
+#ifndef FX_FIXED_PIPELINE
+	glUseProgramObjectARB(0);
+#endif
 	glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);
 	glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, 0);
 	glBindTexture(GL_TEXTURE_2D, 0);
 	// reenable writing to the depth buffer
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
+#ifdef FX_FIXED_PIPELINE
 	glColor4f(1, 1, 1, 1);
+#endif
 }
 
 void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
+#ifdef FX_FIXED_PIPELINE
 	static GLmatrix_t m;
 	float s = sinf(angle);
 	float c = cosf(angle);
@@ -87,9 +98,16 @@ void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
 	glLoadMatrixf(m);
 
 	glColor4f(1, 1, 1, alpha);
+#else
+	glMultiTexCoord3fv(GL_TEXTURE1, pos.f);
+	glMultiTexCoord3f(GL_TEXTURE2, angle, alpha, scale);
+#endif
+
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void *)0);
 
+#ifdef FX_FIXED_PIPELINE
 	glPopMatrix();
+#endif
 }
 
 void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale) {

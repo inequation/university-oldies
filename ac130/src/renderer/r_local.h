@@ -18,6 +18,9 @@
 /// \file r_local.h
 /// \brief Private interfaces to all renderer modules.
 
+/// \addtogroup priv_r Private renderer interface
+/// @{
+
 /// Convenience define for an OpenGL 4x4 matrix.
 typedef GLfloat	GLmatrix_t[16];
 
@@ -68,20 +71,20 @@ void r_destroy_props(void);
 // FX engine
 /// Creates all special effects resources.
 void r_create_fx(void);
-/*void r_start_fx(void);
-void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle);
-void r_draw_tracer(ac_vec4_t pos, ac_vec4_t dir, float scale);
-void r_finish_fx(void);*/
 /// Frees all special effects resources.
 void r_destroy_fx(void);
 
 // 2D drawing module
 /// Creates font resources.
 void r_create_font(void);
-/*void r_draw_string(char *str, float ox, float oy, float scale);
-void r_draw_lines(float pts[][2], uint num_pts, float width);*/
 /// Frees font resources.
 void r_destroy_font(void);
+
+// Footmobile module
+/// Creates footmobile resources.
+void r_create_footmobile(void);
+/// Frees footmobile resources.
+void r_destroy_footmobile(void);
 
 // shader module
 /// Creates, compiles and links shaders.
@@ -92,6 +95,8 @@ void r_destroy_shaders(void);
 // programs
 extern uint	r_ter_prog;			///< terrain rendering program
 extern uint	r_prop_prog;		///< prop rendering program
+extern uint	r_sprite_prog;		///< sprite program
+extern uint	r_fmb_prog;			///< footmobile program
 extern uint	r_font_prog;		///< font rendering program
 extern uint	r_comp_prog;		///< compositing program
 // uniform variables
@@ -100,5 +105,7 @@ extern int	r_ter_height_samples;	///< height samples table
 extern int	r_comp_frames;		///< frame texture indices
 extern int	r_comp_neg;			///< colour inversion coefficient
 extern int	r_comp_contrast;	///< contrast enhancement coefficient
+
+/// @}
 
 #endif // R_LOCAL_H

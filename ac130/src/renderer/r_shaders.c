@@ -11,6 +11,9 @@
 #include "../shaders/terrain_fs.glsl"
 #include "../shaders/prop_vs.glsl"
 #include "../shaders/prop_fs.glsl"
+#include "../shaders/sprite_vs.glsl"
+#include "../shaders/sprite_fs.glsl"
+#include "../shaders/footmobile_vs.glsl"
 #include "../shaders/font_fs.glsl"
 #include "../shaders/compositor_vs.glsl"
 #include "../shaders/compositor_fs.glsl"
@@ -24,6 +27,14 @@ int			r_ter_height_samples = -1;
 uint		r_prop_prog = 0;
 uint		r_prop_vs = 0;
 uint		r_prop_fs = 0;
+
+uint		r_sprite_prog = 0;
+uint		r_sprite_vs = 0;
+uint		r_sprite_fs = 0;
+
+uint		r_fmb_prog = 0;
+uint		r_fmb_vs = 0;
+uint		r_fmb_fs = 0;
 
 uint		r_font_prog = 0;
 uint		r_font_vs = 0;
@@ -110,6 +121,14 @@ bool r_create_shaders(void) {
 	if (!r_create_program("Prop", PROP_VS, PROP_FS,
 		&r_prop_vs, &r_prop_fs, &r_prop_prog))
 		return false;
+	// create the sprite GPU program
+	if (!r_create_program("Sprite", SPRITE_VS, SPRITE_FS,
+		&r_sprite_vs, &r_sprite_fs, &r_sprite_prog))
+		return false;
+	// create the footmobile GPU program
+	if (!r_create_program("Footmobile", FOOTMOBILE_VS, FONT_FS,
+		&r_fmb_vs, &r_fmb_fs, &r_fmb_prog))
+		return false;
 
 	// set the terrain shader up
 	glUseProgramObjectARB(r_ter_prog);
@@ -138,6 +157,22 @@ bool r_create_shaders(void) {
 	glUseProgramObjectARB(r_prop_prog);
 	if ((i = glGetUniformLocationARB(r_prop_prog, "propTex")) < 0) {
 		fprintf(stderr, "Failed to find prop texture uniform variable\n");
+		return false;
+	}
+	glUniform1iARB(i, 0);
+
+	// set the sprite shader up
+	glUseProgramObjectARB(r_sprite_prog);
+	if ((i = glGetUniformLocationARB(r_sprite_prog, "spriteTex")) < 0) {
+		fprintf(stderr, "Failed to find sprite texture uniform variable\n");
+		return false;
+	}
+	glUniform1iARB(i, 0);
+
+	// set the footmobile shader up
+	glUseProgramObjectARB(r_fmb_prog);
+	if ((i = glGetUniformLocationARB(r_fmb_prog, "fontTex")) < 0) {
+		fprintf(stderr, "Failed to find footmobile texture uniform variable\n");
 		return false;
 	}
 	glUniform1iARB(i, 0);
@@ -179,28 +214,18 @@ bool r_create_shaders(void) {
 	return true;
 }
 
+static inline void r_destroy_program(uint prog, uint vs, uint fs) {
+	glDetachObjectARB(prog, vs);
+	glDetachObjectARB(prog, fs);
+	glDeleteObjectARB(vs);
+	glDeleteObjectARB(fs);
+	glDeleteObjectARB(prog);
+}
+
 void r_destroy_shaders(void) {
-	glDetachObjectARB(r_comp_prog, r_comp_vs);
-	glDetachObjectARB(r_comp_prog, r_comp_fs);
-	glDeleteObjectARB(r_comp_vs);
-	glDeleteObjectARB(r_comp_fs);
-	glDeleteObjectARB(r_comp_prog);
-
-	glDetachObjectARB(r_font_prog, r_font_vs);
-	glDetachObjectARB(r_font_prog, r_font_fs);
-	glDeleteObjectARB(r_font_vs);
-	glDeleteObjectARB(r_font_fs);
-	glDeleteObjectARB(r_font_prog);
-
-	glDetachObjectARB(r_prop_prog, r_prop_vs);
-	glDetachObjectARB(r_prop_prog, r_prop_fs);
-	glDeleteObjectARB(r_prop_vs);
-	glDeleteObjectARB(r_prop_fs);
-	glDeleteObjectARB(r_prop_prog);
-
-	glDetachObjectARB(r_ter_prog, r_ter_vs);
-	glDetachObjectARB(r_ter_prog, r_ter_fs);
-	glDeleteObjectARB(r_ter_vs);
-	glDeleteObjectARB(r_ter_fs);
-	glDeleteObjectARB(r_ter_prog);
+	r_destroy_program(r_comp_prog, r_comp_vs, r_comp_fs);
+	r_destroy_program(r_font_prog, r_font_vs, r_font_fs);
+	r_destroy_program(r_sprite_prog, r_sprite_vs, r_sprite_fs);
+	r_destroy_program(r_prop_prog, r_prop_vs, r_prop_fs);
+	r_destroy_program(r_ter_prog, r_ter_vs, r_ter_fs);
 }
