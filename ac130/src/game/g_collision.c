@@ -9,6 +9,7 @@ static inline float g_trace_through_AABB(ac_vec4_t p1, ac_vec4_t p2,
 	ac_vec4_t bounds[2]) {
 	float d1, d2, f;
 	float enterFrac = -1.f, leaveFrac = 1.f;
+	bool startOut = false;
 	int i;
 	for (i = 0; i < 6; i++) {
 		if (i < 3) {
@@ -18,6 +19,8 @@ static inline float g_trace_through_AABB(ac_vec4_t p1, ac_vec4_t p2,
 			d1 = p1.f[i - 3] - bounds[1].f[i - 3];
 			d2 = p2.f[i - 3] - bounds[1].f[i - 3];
 		}
+		if (d1 > 0)
+            startOut = true;
 		// if completely in front of face, no intersection with the entire AABB
 		if (d1 > 0 && (d2 >= 0.f || d2 >= d1))
 			return 1.f;
@@ -39,6 +42,8 @@ static inline float g_trace_through_AABB(ac_vec4_t p1, ac_vec4_t p2,
 				leaveFrac = f;
 		}
 	}
+	if (!startOut)
+        return 0.f;
 	if (enterFrac < leaveFrac)
 		return (enterFrac > 0 ? enterFrac : 0.f);
 	return 1.f;
@@ -71,7 +76,7 @@ static inline float g_trace_through_bldg(ac_vec4_t p1, ac_vec4_t p2,
 					ac_vec_dot(p1, z),
 					0.f);
 	l2 = ac_vec_set(ac_vec_dot(p2, x),
-					p1.f[1],
+					p2.f[1],
 					ac_vec_dot(p2, z),
 					0.f);
 	// calculate the bounding box
@@ -93,8 +98,10 @@ static float g_collide_bldgs(ac_vec4_t p1, ac_vec4_t p2, ac_prop_t *node,
 	if (node->bldgs) {
 		for (i = 0; i < BLDGS_PER_FIELD; i++) {
 			if ((frac = g_trace_through_bldg(p1, p2, node->bldgs + i))
-				< curFrac)
+				< curFrac) {
+                printf("LOL %f\n", frac);
 				curFrac = frac;
+            }
 		}
 	} else if (frac >= curFrac)
 		// if we haven't hit our AABB or we hit it further than the closest hit
