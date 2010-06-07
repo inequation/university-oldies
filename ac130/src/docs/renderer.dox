@@ -115,7 +115,7 @@ simulate the smudging of a worn out CRT display. Please note that the
 convolution kernel is asymetric - it only reads one row of pixels, and only to
 the left of the base pixel, resulting in a smudge that is biased to the right.
 
-\section References
+\section r_refs References
 -	\anchor Vistnes07 [0]
 	http://www.cs.montana.edu/courses/525/presentations/Mike2.pdf
 -	\anchor AssarssonMoeller99 [1]

@@ -118,7 +118,11 @@
 		<Unit filename="src/ac_math.h" />
 		<Unit filename="src/font.h" />
 		<Unit filename="src/footmobile.h" />
-		<Unit filename="src/game.c">
+		<Unit filename="src/game/g_collision.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="src/game/g_local.h" />
+		<Unit filename="src/game/g_main.c">
 			<Option compilerVar="CC" />
 		</Unit>
 		<Unit filename="src/generator.c">

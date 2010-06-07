@@ -20,10 +20,10 @@ implementation-dependent, and I want constant behaviour everywhere.
 
 The formula I used in the final version is a simplified variant of one which I
 found on the internet, published by someone claiming it to be equivalent to the
-glibc \c rand() function. This is not true, of course, as it has one major flaw
-- it's just a simple multiplication, albeit on 64 bits, so once the sequence
-hits a zero, it stays that way, because anything times zero is zero. I overcame
-this shortcoming simply by adding 1 (and subtracting it from the return value to
+glibc \c rand() function. This is not true, of course, as it has one major flaw:
+it's just a simple multiplication, albeit on 64 bits, so once the sequence hits
+a zero, it stays that way, because anything times zero is zero. I overcame this
+shortcoming simply by adding 1 (and subtracting it from the return value to
 cancel the addition out). Also, I changed the seed storage type from a signed to
 unsigned integer, which allowed for the removal of 1 comparison and 1 addition
 from the function. These changes do not change the results thanks to the nature
@@ -38,11 +38,10 @@ smoke plums). \b Noise was definitely the way to go; only the most obvious
 solution - to pick a random number in the [0..255] range for every pixel in the
 image - produces a result somewhat remniscent of TV static rather than
 believable topographical data. Something with a more natural appearance was
-needed, so I resorted to the \b Perlin \b noise. I'm not going to explain it
-here, though - there is a pretty lengthy paper on it at Ken Perlin's website
-(http://mrl.nyu.edu/~perlin/) with a theoretical background. Suffice to say it
-produces nice, smooth and natural in appearance noise patterns. The function \c
-gen_perlin returns values in the [-1..1] range.
+needed, so I resorted to the \b Perlin \b noise, as described in Ken Perlin's
+paper, \e Making \e Noise \ref Perlin99 "[0]". Suffice to say it produces nice,
+smooth and natural in appearance noise patterns. The function \c gen_perlin
+returns values in the [-1..1] range.
 
 \section heightmap Terrain heightmap
 The topographical data for the terrain is generated using a technique known as
@@ -153,6 +152,9 @@ particle always revolves around the point in the centre.
 
 The algorithms used to create textures are trivial and are best described by
 their code.
+
+\section gen_refs References
+-	\anchor Perlin99 [0] http://www.noisemachine.com/talk1/
 
 \if build_html
 Next: \ref renderer

@@ -85,6 +85,7 @@ typedef struct {
 	ac_vec4_t	pos;
 	float		ang;
 	ac_stance_t	stance;
+	int			health;
 } ac_footmobile_t;
 
 /// @}

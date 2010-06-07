@@ -14,19 +14,19 @@ void main() {
 	d += 1.0 - step(0.01, abs(d));
 	mat4 mat = mat4(
 		// column 1
-		10.0 * sign(d),	// orient the soldier accordingly
+		2.0 * sign(d),	// orient the soldier accordingly
 		0.0,
 		0.0,
 		0.0,
 		// column 2
 		0.0,
-		10.0,
+		2.0,
 		0.0,
 		0.0,
 		// column 3
 		0.0,
 		0.0,
-		10.0,
+		2.0,
 		0.0,
 		gl_ModelViewMatrix * vec4(gl_MultiTexCoord1.xyz, 1.0)
 	);

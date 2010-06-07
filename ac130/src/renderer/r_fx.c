@@ -104,6 +104,8 @@ void r_draw_fx(ac_vec4_t pos, float scale, float alpha, float angle) {
 #endif
 
 	glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_BYTE, (void *)0);
+	*r_vert_counter += 4;
+	*r_tri_counter += 2;
 
 #ifdef FX_FIXED_PIPELINE
 	glPopMatrix();

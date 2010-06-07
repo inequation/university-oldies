@@ -322,7 +322,7 @@ void r_start_scene(int time, ac_viewpoint_t *vp) {
 		0, 0, 1, 0,	// 8
 		0, 0, 0, 1	// 12
 	};
-	static const double zNear = 0.1, zFar = 800.0;
+	static const double zNear = 2.0, zFar = 800.0;
 	double x, y;
 	float cy, cp, sy, sp;
 	ac_vec4_t fwd, right, up;

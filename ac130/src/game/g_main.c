@@ -1,51 +1,9 @@
 // AC-130 shooter
 // Written by Leszek Godlewski <leszgod081@student.polsl.pl>
 
-// Game logic module
+// Main game logic module
 
-#include "ac130.h"
-
-typedef enum {
-	WP_NONE,
-	/// M61 Vulcan minigun bullet
-	WP_M61,
-	/// L/60 Bofors cannon round
-	WP_L60,
-	/// M102 howitzer round
-	WP_M102,
-	/// M61 tracer round; not really a separate weapon, but we need to
-	/// distinguish between normal and tracer rounds
-	WP_M61_TRACER
-} weap_t;
-
-typedef struct {
-	weap_t	weap;
-	ac_vec4_t	pos;
-	ac_vec4_t	vel;
-} projectile_t;
-
-typedef struct {
-	ac_vec4_t	pos;
-	ac_vec4_t	vel;
-	float		scale;
-	float		life;
-	float		alpha;
-	float		angle;
-	weap_t		weap;
-} particle_t;
-
-/// Real rate of fire: 6000 rounds per minute
-#define WEAP_FIREDELAY_M61	0.01
-/// Real rate of fire: 120 rounds per minute
-#define WEAP_FIREDELAY_L60	0.5
-/// Real rate of fire: 10 rounds per minute
-#define WEAP_FIREDELAY_M102	6
-/// Real muzzle velocity: 1050m/s
-#define WEAP_MUZZVEL_M61	350//1050
-/// Real muzzle velocity: 881m/s
-#define WEAP_MUZZVEL_L60	300//881
-/// Real muzzle velocity: 494m/s
-#define WEAP_MUZZVEL_M102	160//494
+#include "g_local.h"
 
 #define MAX_PROJECTILES		512
 projectile_t	g_projs[MAX_PROJECTILES];
@@ -76,13 +34,10 @@ ac_viewpoint_t	g_viewpoint = {
 
 weap_t			g_weapon = WP_M61;
 
-#define SHAKE_TIME			0.45
 float			g_shake_time = -SHAKE_TIME;
 
-#define NEGATIVE_TIME		0.25
 float			g_neg_time = 0.f;
 
-#define EXPLOSION_TIME		2.0
 float			g_expl_time = -EXPLOSION_TIME;
 
 bool g_init(void) {
@@ -121,34 +76,16 @@ float g_sample_height(float x, float y) {
 	xfrac = modff(x, &xi);
 	yfrac = modff(y, &yi);
 
+	if (yi < 0.f || xi < 0.f
+		|| yi + 1 >= HEIGHTMAP_SIZE || xi + 1 >= HEIGHTMAP_SIZE)
+		return 0.f;
+
 	// bilinear filtering
 	fR1 = (1.f - xfrac) * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi]
 		+ xfrac * gen_heightmap[(int)yi * HEIGHTMAP_SIZE + (int)xi + 1];
 	fR2 = (1.f - xfrac) * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE +(int)xi]
 		+ xfrac * gen_heightmap[((int)yi + 1) * HEIGHTMAP_SIZE + (int)xi + 1];
 	return ((1.f - yfrac) * fR1 + yfrac * fR2) * HEIGHT_SCALE;
-}
-
-ac_vec4_t g_collide(ac_vec4_t p1, ac_vec4_t p2) {
-	ac_vec4_t half = ac_vec_setall(0.5);
-	ac_vec4_t v = ac_vec_sub(p2, p1);
-	ac_vec4_t p;
-	float h;
-	int i;
-	// bisect for at most 4 steps or until a solution within 10cm is found
-	for (i = 0; i < 4; i++) {
-		v = ac_vec_mul(v, half);
-		p = ac_vec_add(p1, v);
-		h = g_sample_height(p.f[0], p.f[2]);
-		if (fabs(p.f[1] - h) < 0.1)
-			break;
-		if (p.f[1] < h)
-			p2 = ac_vec_add(p1, v);
-		else
-			p1 = ac_vec_add(p1, v);
-	}
-	p.f[1] = h;
-	return p;
 }
 
 int g_particle_cmp(const void *p1, const void *p2) {
@@ -309,8 +246,8 @@ void g_explode(ac_vec4_t pos, weap_t w) {
 				p->weap = w;
 				p->pos = pos;
 				p->alpha = 1.f;
-				p->scale = 0.4;
-				p->life = 1.5 + 0.001 * (rand() % 101);
+				p->scale = 0.2 + 0.0001 * (rand() % 4001);
+				p->life = 1.4 + 0.0001 * (rand() % 3001);
 				p->angle = 0.01 * (rand() % 628);
 				dir = ac_vec_set(
 					-2000 + (rand() % 4001),
@@ -882,19 +819,19 @@ void g_frame(int ticks, float frameTime, ac_input_t *input) {
 		r_start_scene(gameTicks, &g_viewpoint);
 
 	// advance the non-player elements of the world
+	// draw a test footmobile
+	static ac_footmobile_t fmb;
+	float xpos = 20.f * sinf(g_time * 0.13);
+	fmb.pos = ac_vec_set(xpos, g_sample_height(512 + xpos, 512), 0, 0);
+	fmb.ang = g_time * 0.5;
+	fmb.stance = STANCE_STAND;
+	r_start_footmobiles();
+	r_draw_squad(&fmb, 1);
+	r_finish_footmobiles();
 	g_advance_projectiles();
 	r_start_fx();
 	g_advance_particles();
 	r_finish_fx();
-
-	// draw a test footmobile
-	ac_footmobile_t fmb;
-	fmb.pos = ac_vec_set(0, g_sample_height(512, 512), 0, 0);
-	fmb.ang = 0.f;
-	fmb.stance = STANCE_CROUCH;
-	r_start_footmobiles();
-	r_draw_squad(&fmb, 1);
-	r_finish_footmobiles();
 
 	r_finish_3D();
 	if (!g_paused)
