@@ -91,7 +91,6 @@ int main (int argc, char *argv[]) {
 	// hide mouse cursor and grab input
 	SDL_ShowCursor(0);
 #ifdef NDEBUG
-	bool grab = true;
 	SDL_WM_GrabInput(SDL_GRAB_ON);
 #else
 	bool grab = m_full_screen;
